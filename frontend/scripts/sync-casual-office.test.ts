@@ -263,7 +263,16 @@ describe("theme", () => {
   });
 
   it("wraps the document toolbar instead of scrolling it sideways", () => {
-    expect(docsHtml).toContain("[data-testid='formatting-bar']");
+    // Upstream utilities are `.ep-root .rounded-full` etc.; an unprefixed
+    // override loses on specificity and the wrapped bar stays a clipped pill.
+    expect(docsHtml).toContain(".ep-root [data-testid='formatting-bar'] {");
     expect(docsHtml).toContain("flex-wrap: wrap;");
+  });
+
+  it("ships the preflight the docs runtime assumes", () => {
+    // Without it every toolbar <button> keeps the browser's outset border.
+    expect(docsHtml).toContain(":where(*, ::before, ::after) {");
+    expect(docsHtml).toContain(":where(button, input, select, textarea) {");
+    expect(docsHtml).toContain("border: 0 solid;");
   });
 });

@@ -513,18 +513,43 @@ export function renderDocsHtml(locale, { bootFile, dictFile }) {
          after it, so equal specificity is enough — no !important needed. */
 ${renderThemeCss(false)}
 
+      /* The slice of Tailwind's preflight the runtime assumes but does not
+         ship: embed-runtime.css is built for a host page that already loaded
+         Tailwind. Without it every <button> keeps the browser's grey fill and
+         thick outset border, and border-r / border-b dividers draw nothing
+         because border-style stays none. :where() keeps this at zero
+         specificity so any upstream rule still wins over it. */
+      :where(*, ::before, ::after) {
+        box-sizing: border-box;
+        border: 0 solid;
+      }
+      :where(button, input, select, textarea) {
+        margin: 0;
+        padding: 0;
+        font: inherit;
+        color: inherit;
+        background-color: transparent;
+        border-radius: 0;
+      }
+      :where(button, [role='button']) {
+        cursor: pointer;
+      }
+
       /* Let the toolbar **wrap** instead of scrolling sideways. Upstream sets
          overflow-x-auto, which in a narrow window hides half the buttons
-         behind a scrollbar nobody thinks to look for. */
-      [data-testid='formatting-bar'] {
+         behind a scrollbar nobody thinks to look for. Upstream's utilities are
+         scoped as \`.ep-root .rounded-full\`, so these need the same prefix to
+         win; without it the wrapped bar stays a pill whose curved ends clip
+         the first and last rows. */
+      .ep-root [data-testid='formatting-bar'] {
         flex-wrap: wrap;
         overflow-x: visible;
         border-radius: 8px;
         min-height: 30px;
         row-gap: 2px;
       }
-      [data-testid='editor-toolbar'],
-      [data-testid='title-bar'] {
+      .ep-root [data-testid='editor-toolbar'],
+      .ep-root [data-testid='title-bar'] {
         flex-wrap: wrap;
         overflow-x: visible;
       }
