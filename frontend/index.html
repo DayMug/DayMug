@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <!-- No `viewport-fit=cover`. That value means "lay me out across the whole
+         display, including the system's reserved edges — I will inset my own
+         content with env(safe-area-inset-*)". This app never used those insets
+         anywhere, so it claimed the reserved band and then put real controls in
+         it: on an iPad the rail's conversation toggle and the model dropdowns
+         landed in the top ~44px, where touches are consumed by the system and
+         never dispatched to the page at all. Leaving viewport-fit at its `auto`
+         default hands the insetting back to the browser. Anything added here
+         later that needs edge-to-edge paint must bring its own
+         env(safe-area-inset-*) padding with it. -->
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, interactive-widget=resizes-content"
+    />
+    <title>DayMug</title>
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

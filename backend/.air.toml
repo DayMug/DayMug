@@ -1,0 +1,26 @@
+root = "."
+tmp_dir = "tmp"
+
+[build]
+  # Binary lives in ./bin/ rather than ./tmp/ so the sibling data/database.db
+  # the running server creates (per config.DefaultDBPath) survives across
+  # restarts. tmp/ stays as the air watcher's scratch dir but no longer
+  # holds anything we care about.
+  cmd = "go build -o ./bin/server ./cmd/server"
+  bin = "./bin/server"
+  # full_bin runs through a shell, so ${VAR:-default} lets the caller's
+  # exported env override this while a plain `air` invocation from
+  # backend/ falls back to the repo-local data/config.yaml.
+  full_bin = "DAYMUG_CONFIG=${DAYMUG_CONFIG:-../data/config.yaml} ./bin/server"
+  args_bin = ["serve"]
+  include_ext = ["go"]
+  exclude_dir = ["tmp", "bin", "vendor"]
+  delay = 1000
+
+[log]
+  time = false
+
+[misc]
+  # Don't wipe state on Ctrl-C — the dev SQLite db lives at ./bin/data/database.db
+  # and we want it to persist across air restarts.
+  clean_on_exit = false

@@ -1,0 +1,31 @@
+version: "2"
+
+linters:
+  enable:
+    - errcheck
+    - govet
+    - staticcheck
+    - unused
+    - ineffassign
+    - misspell
+    - unconvert
+    - gocritic
+    # Keeps the Go 1.13 error chain intact: catches `%v` on an error inside
+    # fmt.Errorf and `==`/`!=` against sentinels, both of which silently break
+    # errors.Is/As. store.ErrNotFound reaches respondStoreError through that
+    # chain. Deliberate non-wrapping (trust boundaries) is opted out per-site
+    # with //nolint:errorlint plus a reason.
+    - errorlint
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  settings:
+    goimports:
+      # v2 moved goimports under formatters and made local-prefixes a list.
+      # The old top-level `linters-settings` block was v1 syntax: `run` merely
+      # ignored it, so the local prefix was silently not applied until
+      # `config verify` started running in CI.
+      local-prefixes:
+        - github.com/DayMug/DayMug

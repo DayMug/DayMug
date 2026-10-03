@@ -1,0 +1,22 @@
+# The build only needs frontend/, backend/ and scripts/docker-entrypoint.sh.
+# Keeping local installs, build output and dev state out keeps the context
+# small and stops a host node_modules (wrong platform) or a dev database
+# from leaking into the image.
+.git
+.github
+.claude
+**/node_modules
+frontend/dist
+backend/bin
+backend/tmp
+backend/server
+backend/cmd/server/dist
+data
+docs
+landing
+*.db
+*.db-shm
+*.db-wal
+*.log
+.env
+.env.*

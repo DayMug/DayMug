@@ -1,0 +1,58 @@
+#!/bin/sh
+# DayMug commit guards — deterministic checks that keep the codebase in step.
+#
+#   1. Deterministic locale parity (zero tokens): every key must exist in all
+#      locales with matching {placeholders}.  -> frontend/scripts/check-i18n.mjs
+#   2. Semantic scan (cheap `sonnet` sub-agent, opt-in): catches user-facing
+#      strings hardcoded in staged .vue/.ts instead of going through t(). It
+#      sends the staged diff to Anthropic via the local `claude` CLI, so it
+#      only runs with DAYMUG_I18N_LLM=1.
+#      -> frontend/scripts/i18n-llm-check.mjs
+#   3. API contract (zero tokens): the JSON field names the Go structs emit
+#      must match the hand-written TypeScript interfaces that model them.
+#      -> frontend/scripts/check-api-contract.mjs
+#
+# 1 and 2 are frontend-only. 3 has a side in each half of the repo, so it runs
+# whenever either frontend/ or backend/ is part of the commit.
+#
+# Bypass everything:        DAYMUG_SKIP_I18N=1 git commit ...   (or --no-verify)
+# Enable the LLM scan:      DAYMUG_I18N_LLM=1 git commit ...
+# Bypass only the contract: DAYMUG_SKIP_API_CONTRACT=1 git commit ...
+#
+# Installed by .githooks/install.sh.
+
+[ -n "$DAYMUG_SKIP_I18N" ] && exit 0
+
+repo_root=$(git rev-parse --show-toplevel) || exit 0
+
+staged=$(git diff --cached --name-only)
+
+# Nothing below is worth doing unless the commit touches code we guard.
+if ! printf '%s\n' "$staged" | grep -qE '^(frontend|backend)/'; then
+  exit 0
+fi
+
+# Every check is a node script under frontend/.
+if ! command -v node >/dev/null 2>&1; then
+  echo "pre-commit: node not found, skipping checks." >&2
+  exit 0
+fi
+
+cd "$repo_root/frontend" || exit 0
+
+if printf '%s\n' "$staged" | grep -qE '^frontend/'; then
+  # 1. Locale parity (fast, always runs).
+  node scripts/check-i18n.mjs || exit 1
+
+  # 2. Semantic hardcoded-string scan (sonnet; opt-in via DAYMUG_I18N_LLM=1,
+  #    skips itself if claude is absent).
+  node scripts/i18n-llm-check.mjs || exit 1
+fi
+
+# 3. A Go struct's json tags and the TS interface mirroring them are one
+#    contract spread over two files, so either side landing alone gets caught.
+if [ -z "$DAYMUG_SKIP_API_CONTRACT" ]; then
+  node scripts/check-api-contract.mjs || exit 1
+fi
+
+exit 0

@@ -1,0 +1,25 @@
+# docker compose up -d --build, then open http://localhost:8090 and create the
+# first admin. All state (config, database, users' work dirs, logs, agent
+# logins) lives in the daymug-state volume; see docs/guides/docker.md.
+services:
+  daymug:
+    build:
+      context: .
+      args:
+        VERSION: ${DAYMUG_VERSION:-dev}
+        INSTALL_CODEX: ${DAYMUG_INSTALL_CODEX:-true}
+    image: daymug:local
+    ports:
+      # Loopback only: a fresh database lets whoever opens the page first
+      # become admin. Put a reverse proxy in front, or change this to
+      # "8090:8090" once the admin account exists.
+      - "127.0.0.1:8090:8090"
+    volumes:
+      - daymug-state:/var/lib/daymug
+    restart: unless-stopped
+    # serve drains HTTP and in-flight agent jobs for up to ~75s on SIGTERM;
+    # compose's 10s default would SIGKILL mid-drain.
+    stop_grace_period: 90s
+
+volumes:
+  daymug-state:

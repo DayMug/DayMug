@@ -1,0 +1,89 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+outputs/
+frontend/dist/
+backend/bin/
+backend/server
+backend/cmd/server/dist/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Go
+backend/tmp/
+
+# SQLite
+*.db
+*.db-shm
+*.db-wal
+
+# Logs
+*.log
+
+tasks/
+/Code/
+
+# Per-machine helper scripts (not checked in; varies per host). Only the
+# scripts the project itself depends on are tracked: the public installer
+# and its test, the test runner, the Docker entrypoint, and the helper
+# release.yml runs. Negation only works when the directory itself is not
+# ignored, hence scripts/* rather than scripts/. Adding a script release.yml
+# runs means adding it here too — otherwise it stays invisible to
+# `git add -A` and the workflow breaks on a fresh clone.
+scripts/*
+!scripts/install.sh
+!scripts/install_test.sh
+!scripts/test.sh
+!scripts/recent_releases.py
+!scripts/docker-entrypoint.sh
+
+# Local dev data (sqlite, user workdirs, machine-specific config.yaml)
+data/
+
+# Per-conversation upload sandbox written by the backend at runtime.
+.daymug/
+# Legacy: uploads lived under the pluralised name before the namespace was
+# unified. Existing workspaces keep that directory on disk (old message
+# references still resolve into it), so it stays ignored.
+.daymugs/
+.daymug-uploads/
+
+# Local conversation transcript exports (debug/inspection artifacts)
+conversation.md
+
+# Claude CLI runtime cache (created when running claude under this repo)
+.cache/
+
+# Personal Claude Code settings overrides
+.claude/settings.local.json
+.claude/state/
+
+# Throwaway git worktrees for isolated subagent runs. Each is a full checkout
+# of the repo, so a stray `git add -A` would otherwise commit the tree into
+# itself.
+.claude/worktrees/
+
+# Tool caches that leak in when HOME resolves to the repo root (npm, Go
+# module/build cache, XDG dirs). Not project files — never checked in.
+/.config/
+/.local/
+/.npm/
+/go/
+
+# Agent-generated deliverables (screenshots, reports, draft diffs) kept for review
+/artifacts/
