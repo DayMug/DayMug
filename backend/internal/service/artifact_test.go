@@ -178,10 +178,8 @@ func TestExtractArtifactsReportsMissingFileWithoutHostPath(t *testing.T) {
 	}
 }
 
-// A marker that lost its directories is the failure this reason exists for: the
-// file really is inside the working directory, just not where the shortened
-// path points. Saying only "file not found" sent users looking for a file the
-// agent had in fact written, so the relative case names the base it searched.
+// A relative marker that matches nothing names the base it searched, so a
+// user can tell "written against the wrong directory" from "never written".
 // An absolute marker gets the plain wording — there is no cwd to blame.
 func TestExtractArtifactsDistinguishesRelativeAndAbsoluteMisses(t *testing.T) {
 	workDir := t.TempDir()
@@ -199,8 +197,8 @@ func TestExtractArtifactsDistinguishesRelativeAndAbsoluteMisses(t *testing.T) {
 		want   string
 	}{
 		{
-			name:   "basename dropped the directory",
-			marker: "[DAYMUG_ARTIFACT shot.png]",
+			name:   "relative path that matches nothing",
+			marker: "[DAYMUG_ARTIFACT other/missing.png]",
 			want:   "file not found under the conversation working directory",
 		},
 		{
@@ -259,5 +257,103 @@ func TestExtractArtifactsPublishesFilesLargerThanAnyIMCap(t *testing.T) {
 	}
 	if len(artifacts) != 1 || artifacts[0].Size != int64(len(body)) {
 		t.Fatalf("artifacts = %+v", artifacts)
+	}
+}
+
+// An agent that cd'ed into a subdirectory writes markers relative to it: the
+// cwd is thesis/, the files live in thesis/draft/, and the marker says
+// "chapters/v15.md". The marker is a suffix of exactly one file, so that file
+// is published rather than reported missing; so is a bare name that matches
+// one file.
+func TestExtractArtifactsRecoversMarkerRelativeToSubdirectory(t *testing.T) {
+	workDir := t.TempDir()
+	draft := filepath.Join(workDir, "draft", "chapters")
+	if err := os.MkdirAll(draft, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(draft, "v15.md"), []byte("# v15\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	// Same base name elsewhere must not count: only the full suffix matches.
+	if err := os.MkdirAll(filepath.Join(workDir, "bak"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(workDir, "bak", "v15.md"), []byte("old\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.WriteFile(filepath.Join(workDir, "draft", "todo_v15.md"), []byte("todo\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	for marker, want := range map[string]string{
+		"chapters/v15.md": "./draft/chapters/v15.md",
+		"todo_v15.md":     "./draft/todo_v15.md",
+	} {
+		_, artifacts, rejected := ExtractArtifacts("done\n[DAYMUG_ARTIFACT "+marker+"]", workDir, workDir, "agent-1")
+		if len(rejected) != 0 {
+			t.Fatalf("%s: rejected = %+v, want none", marker, rejected)
+		}
+		if len(artifacts) != 1 || artifacts[0].Path != want {
+			t.Fatalf("%s: artifacts = %+v, want %s", marker, artifacts, want)
+		}
+	}
+}
+
+// Recovery only ever picks a single file. Two candidates (with or without a
+// directory in the marker), a path climbing with "..", a skipped directory, and a match that escapes through a symlinked
+// directory all stay rejected.
+func TestExtractArtifactsSuffixRecoveryRefusesUnsafeMatches(t *testing.T) {
+	workDir := t.TempDir()
+	write := func(rel string) {
+		t.Helper()
+		full := filepath.Join(workDir, rel)
+		if err := os.MkdirAll(filepath.Dir(full), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(full, []byte("content\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("a/out/report.md")
+	write("b/out/report.md")
+	write("c/notes.md")
+	write("e/notes.md")
+	write("d/sub/x.md")
+	write("node_modules/pkg/lib/index.js")
+	outside := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(outside, "leak"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(outside, "leak", "secret.txt"), []byte("secret\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outside, filepath.Join(workDir, "link")); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, tc := range []struct {
+		name   string
+		marker string
+		want   string
+	}{
+		{"ambiguous suffix", "out/report.md", "matches several files under the conversation working directory"},
+		{"ambiguous bare name", "notes.md", "matches several files under the conversation working directory"},
+		{"climbs with dot-dot", "sub/../sub/x.md", "file not found under the conversation working directory"},
+		{"skipped directory", "lib/index.js", "file not found under the conversation working directory"},
+		{"behind a symlinked directory", "leak/secret.txt", "file not found under the conversation working directory"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, artifacts, rejected := ExtractArtifacts("done\n[DAYMUG_ARTIFACT "+tc.marker+"]", workDir, workDir, "agent-1")
+			if len(artifacts) != 0 || len(rejected) != 1 {
+				t.Fatalf("artifacts = %+v rejected = %+v", artifacts, rejected)
+			}
+			if rejected[0].Reason != tc.want {
+				t.Fatalf("reason = %q, want %q", rejected[0].Reason, tc.want)
+			}
+			if strings.Contains(rejected[0].String(), workDir) {
+				t.Fatalf("user-facing rejection %q leaks the host path", rejected[0].String())
+			}
+		})
 	}
 }

@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
+	"log"
 	"net/http"
 	"net/url"
 	"os"
@@ -17,7 +19,19 @@ import (
 const (
 	artifactDirectivePrefix = prompts.ArtifactMarkerPrefix
 	maxPublishedArtifacts   = 10
+
+	// maxArtifactSearchDirs bounds the suffix search a missed relative marker
+	// falls back to. A cwd too large to search in full gets no recovery at
+	// all: uniqueness proven over part of a tree proves nothing.
+	maxArtifactSearchDirs = 10000
 )
+
+// artifactSearchSkipDirs are never descended into by the suffix search: they
+// are large, and nothing an agent publishes for the user lives in them.
+var artifactSearchSkipDirs = map[string]struct{}{
+	".git":         {},
+	"node_modules": {},
+}
 
 // Extraction deliberately carries no byte cap. It runs before the turn's
 // transport is known, so any number chosen here is wrong for every channel at
@@ -118,7 +132,7 @@ func ExtractArtifacts(content, workDir, fileRootDir, ownerID string) (string, []
 			rejected = append(rejected, ArtifactRejection{Path: path, Reason: reason, Detail: errors.New(reason)})
 			continue
 		}
-		artifact, reason, err := resolveArtifact(path, workDir, fileRootDir, ownerID)
+		artifact, reason, err := resolvePublishedArtifact(path, workDir, fileRootDir, ownerID)
 		if err != nil {
 			rejected = append(rejected, ArtifactRejection{Path: path, Reason: reason, Detail: err})
 			continue
@@ -143,6 +157,84 @@ func artifactDirectivePath(line string) (string, bool) {
 		}
 	}
 	return path, true
+}
+
+// resolvePublishedArtifact resolves a marker the way resolveArtifact does, then
+// recovers one common miss: a relative path written against a subdirectory
+// the agent had cd'ed into instead of against the conversation cwd (the cwd is
+// ~/thesis, the agent worked in ~/thesis/draft and published
+// "chapters/v15.md" or just "todo.md"). The marker is then a suffix of the
+// real path, so a file
+// whose path ends in exactly those segments is published — but only when it
+// is the single such file under the cwd. The recovered file goes through the
+// same validation as any other marker.
+func resolvePublishedArtifact(path, workDir, fileRootDir, ownerID string) (Artifact, string, error) {
+	artifact, reason, err := resolveArtifact(path, workDir, fileRootDir, ownerID)
+	if err == nil || filepath.IsAbs(path) || reason != missingArtifactReason(path) {
+		return artifact, reason, err
+	}
+	matches, complete := findArtifactBySuffix(workDir, path)
+	switch {
+	case len(matches) > 1:
+		return Artifact{}, "matches several files under the conversation working directory",
+			fmt.Errorf("%w; marker is a suffix of %s", err, strings.Join(matches, ", "))
+	case len(matches) == 1 && complete:
+		recovered, _, rerr := resolveArtifact(matches[0], workDir, fileRootDir, ownerID)
+		if rerr != nil {
+			return artifact, reason, fmt.Errorf("%w; suffix match %s rejected: %w", err, matches[0], rerr)
+		}
+		log.Printf("[artifact] marker %q missed the working directory; published suffix match %s", path, recovered.LocalPath)
+		return recovered, "", nil
+	}
+	return artifact, reason, err
+}
+
+// findArtifactBySuffix lists the non-directory entries below workDir whose
+// path ends in rel. It stops at the second match, which is already an
+// ambiguity, and reports complete=false when the search hit its size cap. A
+// bare file name is searched too — agents drop the directory as often as they
+// write it against the wrong base — and stays safe through the same
+// uniqueness rule. Markers that climb with ".." are not searched, and
+// symlinked directories are not followed.
+func findArtifactBySuffix(workDir, rel string) (matches []string, complete bool) {
+	for _, segment := range strings.Split(filepath.ToSlash(rel), "/") {
+		if segment == ".." {
+			return nil, true
+		}
+	}
+	clean := filepath.Clean(filepath.FromSlash(rel))
+	root, err := filepath.EvalSymlinks(workDir)
+	if err != nil {
+		return nil, true
+	}
+	complete = true
+	visited := 0
+	_ = filepath.WalkDir(root, func(dir string, entry fs.DirEntry, err error) error {
+		if err != nil || !entry.IsDir() {
+			return nil
+		}
+		if dir == root {
+			// The direct join is what resolveArtifact already tried.
+			return nil
+		}
+		if _, skip := artifactSearchSkipDirs[entry.Name()]; skip {
+			return filepath.SkipDir
+		}
+		visited++
+		if visited > maxArtifactSearchDirs {
+			complete = false
+			return filepath.SkipAll
+		}
+		candidate := filepath.Join(dir, clean)
+		if info, err := os.Lstat(candidate); err == nil && !info.IsDir() {
+			matches = append(matches, candidate)
+			if len(matches) > 1 {
+				return filepath.SkipAll
+			}
+		}
+		return nil
+	})
+	return matches, complete
 }
 
 // resolveArtifact validates one declared path. It returns a short reason
