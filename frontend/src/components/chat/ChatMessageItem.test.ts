@@ -3,10 +3,12 @@ import { flushPromises, mount } from "@vue/test-utils";
 import ChatMessageItem from "./ChatMessageItem.vue";
 
 vi.mock("@/composables/useMarkdown", () => ({
-  renderMarkdown: (s: string) =>
-    s.startsWith("```")
-      ? `<pre class="hljs"><code>${s.slice(4, -3)}</code></pre>`
-      : `<p>${s.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")}</p>`,
+  renderMarkdown: (s: string, opts?: { breaks?: boolean }) =>
+    opts?.breaks && s.includes("\n")
+      ? `<p>${s.split("\n").join("<br>")}</p>`
+      : s.startsWith("```")
+        ? `<pre class="hljs"><code>${s.slice(4, -3)}</code></pre>`
+        : `<p>${s.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")}</p>`,
 }));
 
 describe("ChatMessageItem", () => {
@@ -27,6 +29,13 @@ describe("ChatMessageItem", () => {
     expect(markdown.classes()).toContain("markdown-body");
     expect(markdown.get("strong").text()).toBe("important");
     expect(markdown.text()).not.toContain("**");
+  });
+
+  it("keeps the line breaks the user typed", () => {
+    const wrapper = mount(ChatMessageItem, {
+      props: { msg: { role: "user", content: "first\nsecond" }, collapsed: false },
+    });
+    expect(wrapper.get(".user-message-markdown").findAll("br")).toHaveLength(1);
   });
 
   it("renders persisted IM image attachments inside the user bubble", () => {

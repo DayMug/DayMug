@@ -8,6 +8,7 @@ type Katex = (typeof import("katex"))["default"];
 // Per-render scratch state markdown-it threads through every rule.
 interface RenderEnv {
   mathPending?: boolean;
+  breaks?: boolean;
 }
 
 const md = new MarkdownIt({
@@ -228,6 +229,14 @@ md.renderer.rules.fence = (tokens, idx, options, env, self) => {
   return defaultFence(tokens, idx, options, env, self);
 };
 
+// Typed text has no "Markdown or plain?" signal worth guessing from, and in a
+// typed message a single Enter means a new line: CommonMark would join
+// "第一行\n第二行" into one line. `breaks` renders each such newline as <br>
+// while every other Markdown construct still works. Off for agent output and
+// files, which are written as Markdown and hard-wrap their source.
+md.renderer.rules.softbreak = (_tokens, _idx, options, env: RenderEnv) =>
+  env.breaks || options.breaks ? "<br>\n" : "\n";
+
 // A chat re-renders rows whose text hasn't changed (remounts on conversation
 // switch, density toggles, list reshuffles), and markdown-it + highlight.js
 // reparse from scratch each time. Keyed by the exact text; Map order doubles
@@ -240,27 +249,31 @@ export interface RenderMarkdownOptions {
   // intermediate snapshot is rendered exactly once, and caching them would
   // only evict the settled messages the cache exists for.
   cache?: boolean;
+  // Keep single newlines as line breaks (user-typed messages).
+  breaks?: boolean;
 }
 
 export function renderMarkdown(text: string, options: RenderMarkdownOptions = {}): string {
   const useCache = options.cache !== false;
-  const hit = useCache ? renderCache.get(text) : undefined;
+  const breaks = options.breaks === true;
+  const key = breaks ? `\0breaks\0${text}` : text;
+  const hit = useCache ? renderCache.get(key) : undefined;
   if (hit && !(hit.mathPending && katex)) {
-    renderCache.delete(text);
-    renderCache.set(text, hit);
+    renderCache.delete(key);
+    renderCache.set(key, hit);
     // Keep the caller subscribed until the math can actually render.
     if (hit.mathPending) void katexVersion.value;
     return hit.html;
   }
 
-  const env: RenderEnv = {};
+  const env: RenderEnv = { breaks };
   const html = md.render(text, env);
   const mathPending = !!env.mathPending;
   if (mathPending) void katexVersion.value;
 
   if (useCache) {
-    renderCache.delete(text);
-    renderCache.set(text, { html, mathPending });
+    renderCache.delete(key);
+    renderCache.set(key, { html, mathPending });
     if (renderCache.size > RENDER_CACHE_LIMIT) {
       const oldest = renderCache.keys().next().value;
       if (oldest !== undefined) renderCache.delete(oldest);

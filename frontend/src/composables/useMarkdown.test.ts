@@ -119,6 +119,16 @@ describe("renderMarkdown", () => {
     expect(html).toContain('rel="noopener noreferrer"');
   });
 
+  it("joins single newlines by default but keeps them with breaks", () => {
+    expect(renderMarkdown("line one\nline two")).not.toContain("<br>");
+    const html = renderMarkdown("line one\nline two", { breaks: true });
+    expect(html).toContain("line one<br>");
+    expect(html).toContain("line two");
+    // The two modes share one cache without returning each other's output.
+    expect(renderMarkdown("line one\nline two")).not.toContain("<br>");
+    expect(renderMarkdown("- a\n- b", { breaks: true })).toContain("<li>a</li>");
+  });
+
   it("keeps in-document anchors without making them new tabs", () => {
     const html = renderMarkdown("[top](#heading)");
     expect(html).toContain('href="#heading"');

@@ -379,7 +379,7 @@ async function copyContent() {
           v-if="userContent"
           v-external-links
           class="user-message-markdown markdown-body"
-          v-html="renderMarkdown(userContent)"
+          v-html="renderMarkdown(userContent, { breaks: true })"
         ></div>
       </div>
       <div
@@ -390,7 +390,7 @@ async function copyContent() {
           v-if="userContent"
           v-external-links
           class="user-message-markdown markdown-body"
-          v-html="renderMarkdown(userContent)"
+          v-html="renderMarkdown(userContent, { breaks: true })"
         ></div>
         <div
           v-if="msg.attachments?.length"
