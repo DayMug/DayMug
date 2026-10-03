@@ -266,3 +266,46 @@ func TestBridgePoolSurvivesConcurrentUseAndShutdown(t *testing.T) {
 	mu.Unlock()
 	eventually(t, "every bridge to be released", func() bool { return released.Load() == total })
 }
+
+// A user's Stop retires the parked bridge and tells the conversation why; a
+// bridge with a turn attached belongs to that turn's cancel and is left alone.
+func TestStopRetiresOnlyAParkedBridge(t *testing.T) {
+	base := time.Date(2026, 8, 21, 9, 0, 0, 0, time.UTC)
+	pinClock(t, base)
+	var parkedReleased, busyReleased atomic.Int32
+	pool := newBridgePool()
+	defer pool.closeAll()
+
+	parked := fakeBridge("parked", base, &parkedReleased)
+	var notices []string
+	var mu sync.Mutex
+	parked.notice = func(text string) { mu.Lock(); notices = append(notices, text); mu.Unlock() }
+	busy := fakeBridge("busy", base, &busyReleased)
+	if _, err := busy.attach(make(chan agent.StreamEvent, 1), "turn-1"); err != nil {
+		t.Fatal(err)
+	}
+	pool.bridges["parked"] = parked
+	pool.bridges["busy"] = busy
+
+	if pool.stop("busy") {
+		t.Fatal("stop retired a bridge with a turn attached")
+	}
+	if pool.stop("missing") {
+		t.Fatal("stop reported a bridge that is not parked")
+	}
+	if !pool.stop("parked") {
+		t.Fatal("stop did not find the parked bridge")
+	}
+	eventually(t, "the stopped bridge to release its slot", func() bool { return parkedReleased.Load() == 1 })
+	if pool.parked("parked") != nil || !parked.isDead() {
+		t.Fatal("the stopped bridge is still parked or alive")
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if len(notices) != 1 || !strings.Contains(notices[0], "you stopped it") {
+		t.Fatalf("notices = %q", notices)
+	}
+	if pool.parked("busy") != busy || busy.isDead() || busyReleased.Load() != 0 {
+		t.Fatal("the attached bridge was disturbed")
+	}
+}

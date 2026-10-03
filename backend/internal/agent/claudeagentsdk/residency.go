@@ -55,10 +55,13 @@ const (
 	// retiring on the empty set alone would kill the process in the window
 	// between "the work finished" and "the model reacts to it".
 	parkDrainGrace = 60 * time.Second
-	// parkHardTTL bounds a bridge whose task set never empties. Aligned with
-	// the default max-silent budget for a turn so a wedged background task
-	// and a wedged turn expire on the same clock.
-	parkHardTTL = 2 * time.Hour
+	// parkHardTTL bounds one continuous park whose task set never empties.
+	// The agent sees nothing while parked, so a background loop that spins
+	// without ever finishing (a poller stuck on an error response, say) would
+	// otherwise hold the conversation "running" for as long as it likes. A
+	// wakeup turn starts a fresh park, so work that keeps reporting back is
+	// not cut off.
+	parkHardTTL = 30 * time.Minute
 	// backgroundEventSilenceTTL stops provider-managed work that is still
 	// reported as live but has produced no stream event for long enough to be
 	// indistinguishable from a wedged monitor. The reaper runs once a minute,
@@ -776,11 +779,30 @@ func (p *bridgePool) reclaimLocked(now time.Time, keep string) {
 			case strings.HasPrefix(why, "no background event for"):
 				reason = "it produced no events for 30 minutes"
 			case strings.HasPrefix(why, "parked longer than"):
-				reason = "the resident session exceeded its two-hour lifetime"
+				reason = "it was still running after 30 minutes"
 			}
 			go func(b *residentBridge, reason string) { _ = b.retire(errBridgeRetired, reason) }(b, reason)
 		}
 	}
+}
+
+// stop retires the parked bridge for key at the user's request. A bridge with
+// a turn attached is not parked and is left to that turn's own cancel.
+func (p *bridgePool) stop(key string) bool {
+	if p == nil || key == "" {
+		return false
+	}
+	p.mu.Lock()
+	b := p.bridges[key]
+	if b == nil || b.Busy() {
+		p.mu.Unlock()
+		return false
+	}
+	delete(p.bridges, key)
+	p.mu.Unlock()
+	log.Printf("[claude-CAS] stopping resident bridge for conversation %s at the user's request", key)
+	go func() { _ = b.retire(errBridgeRetired, "you stopped it") }()
+	return true
 }
 
 func (p *bridgePool) startReaper() {

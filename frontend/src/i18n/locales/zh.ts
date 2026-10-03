@@ -195,6 +195,7 @@ export default {
     you: "你",
     assistantThinking: "{name} 正在思考",
     waitingOnBackground: "{name} 在等后台任务跑完，跑完会自动继续",
+    stopBackground: "停止",
     back: "返回",
     mobileNavigation: "工作台导航",
     mobileConversationsTab: "会话",

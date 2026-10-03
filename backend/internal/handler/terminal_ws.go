@@ -11,6 +11,7 @@ import (
 	"github.com/coder/websocket"
 	"github.com/google/uuid"
 
+	"github.com/DayMug/DayMug/backend/internal/agent"
 	"github.com/DayMug/DayMug/backend/internal/service"
 	"github.com/DayMug/DayMug/backend/internal/store"
 )
@@ -363,6 +364,9 @@ func (h *TerminalHandler) handleCancelMsg(
 		return
 	}
 	h.Broadcaster.CancelJob(state.conversationID)
+	// A turn that ended with background work still running leaves its agent
+	// process parked with no job to cancel; Stop ends that work too.
+	agent.StopResident(state.conversationID)
 	if h.Dispatcher != nil && state.conversationID != "" {
 		cancelCtx, cancelCancel := context.WithTimeout(ctx, 10*time.Second)
 		dropped, err := h.Dispatcher.CancelPending(cancelCtx, state.conversationID)

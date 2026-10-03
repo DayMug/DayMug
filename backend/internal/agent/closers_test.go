@@ -22,3 +22,33 @@ func TestCloseRegisteredRunsEachCloserOnce(t *testing.T) {
 		t.Fatalf("second CloseRegistered ran %d closer(s), total calls %d", n, calls)
 	}
 }
+
+func TestStopResidentAsksEveryStopper(t *testing.T) {
+	residentStoppers.mu.Lock()
+	saved := residentStoppers.stoppers
+	residentStoppers.stoppers = nil
+	residentStoppers.mu.Unlock()
+	t.Cleanup(func() {
+		residentStoppers.mu.Lock()
+		residentStoppers.stoppers = saved
+		residentStoppers.mu.Unlock()
+	})
+
+	var asked []string
+	RegisterResidentStopper(func(id string) bool { asked = append(asked, "a:"+id); return false })
+	RegisterResidentStopper(nil)
+	RegisterResidentStopper(func(id string) bool { asked = append(asked, "b:"+id); return id == "conv" })
+
+	if !StopResident("conv") {
+		t.Fatal("StopResident = false, want true when one adapter held the conversation")
+	}
+	if StopResident("other") {
+		t.Fatal("StopResident = true for a conversation nobody holds")
+	}
+	if StopResident("") {
+		t.Fatal("StopResident = true for an empty id")
+	}
+	if len(asked) != 4 || asked[0] != "a:conv" || asked[1] != "b:conv" {
+		t.Fatalf("stoppers asked = %v", asked)
+	}
+}

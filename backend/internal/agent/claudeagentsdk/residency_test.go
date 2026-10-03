@@ -663,7 +663,10 @@ func TestReclaimablePolicy(t *testing.T) {
 			tasks: 1, parkedAt: base, now: base.Add(backgroundEventSilenceTTL), want: true,
 		},
 		"recent event extends silence window": {
-			tasks: 1, parkedAt: base, lastEventAt: base.Add(20 * time.Minute), now: base.Add(40 * time.Minute), want: false,
+			tasks: 1, parkedAt: base, lastEventAt: base.Add(10 * time.Minute), now: base.Add(25 * time.Minute), want: false,
+		},
+		"events do not extend a park past the hard ttl": {
+			tasks: 1, parkedAt: base, lastEventAt: base.Add(25 * time.Minute), now: base.Add(parkHardTTL + time.Minute), want: true,
 		},
 		"work finished, in grace": {tasks: 0, parkedAt: base, now: base.Add(parkDrainGrace / 2), want: false},
 		"work finished, past grace": {

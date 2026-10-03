@@ -49,6 +49,9 @@ func NewBackend() agent.Backend {
 	// And the same blind spot on the way in: a graceful upgrade decides to
 	// restart because no job is in flight, which a parked bridge never is.
 	agent.RegisterResidentProbe(r.pool.activeResidentCount)
+	// And a user's Stop: a parked conversation has no turn to cancel, so the
+	// only way to end its background work early is to retire the process.
+	agent.RegisterResidentStopper(r.pool.stop)
 	return r
 }
 func (*runner) Name() string { return "claude-agent-sdk" }

@@ -61,6 +61,44 @@ func ResidentCount() int {
 	return total
 }
 
+// Resident-process stopping, registered the same way: a user's Stop has to
+// reach a process that belongs to no turn, which the Broadcaster's per-turn
+// cancel never sees.
+var residentStoppers = struct {
+	mu       sync.Mutex
+	stoppers []func(controlID string) bool
+}{}
+
+// RegisterResidentStopper records a way to end the parked process (and the
+// background work it holds) for one conversation. Adapters call this when
+// they park a process between turns.
+func RegisterResidentStopper(stop func(controlID string) bool) {
+	if stop == nil {
+		return
+	}
+	residentStoppers.mu.Lock()
+	defer residentStoppers.mu.Unlock()
+	residentStoppers.stoppers = append(residentStoppers.stoppers, stop)
+}
+
+// StopResident ends whatever parked process any adapter holds for controlID.
+// It reports whether one was found.
+func StopResident(controlID string) bool {
+	if controlID == "" {
+		return false
+	}
+	residentStoppers.mu.Lock()
+	stoppers := append([]func(string) bool(nil), residentStoppers.stoppers...)
+	residentStoppers.mu.Unlock()
+	stopped := false
+	for _, stop := range stoppers {
+		if stop(controlID) {
+			stopped = true
+		}
+	}
+	return stopped
+}
+
 // CloseRegistered runs every registered teardown function in registration
 // order and clears the list, so a second call — a shutdown path that both
 // drains cleanly and then force-stops, say — is a no-op rather than a

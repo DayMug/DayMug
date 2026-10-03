@@ -36,7 +36,7 @@ const props = defineProps<{
   isConnected: boolean;
 }>();
 
-const emit = defineEmits<{ "clear-context": [] }>();
+const emit = defineEmits<{ "clear-context": []; "stop-background": [] }>();
 
 const { t } = useI18n();
 
@@ -125,6 +125,17 @@ function toggleToolGroup(group: ToolGroupItem) {
     >
       <Hourglass class="size-3.5 shrink-0" aria-hidden="true" />
       <span>{{ t("chat.waitingOnBackground", { name: assistantLabel }) }}</span>
+      <Button
+        type="button"
+        data-testid="stop-background-btn"
+        variant="outline"
+        size="sm"
+        class="h-6 shrink-0 rounded-full px-2.5 text-[12px] font-normal"
+        :disabled="!isConnected"
+        @click="emit('stop-background')"
+      >
+        {{ t("chat.stopBackground") }}
+      </Button>
     </div>
     <!-- Rotates the underlying session id so the next message starts a fresh CLI
        process with no prior context, while keeping the thread visible. Distinct

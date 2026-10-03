@@ -96,6 +96,12 @@ describe("ChatTranscript", () => {
     );
   });
 
+  it("offers to stop the background work", async () => {
+    const wrapper = mountTranscript({ isWaitingOnBackground: true });
+    await wrapper.get('[data-testid="stop-background-btn"]').trigger("click");
+    expect(wrapper.emitted("stop-background")).toHaveLength(1);
+  });
+
   it("prefers the thinking indicator once the background work wakes the agent", () => {
     const wrapper = mountTranscript({ isThinking: true, isWaitingOnBackground: true });
     expect(wrapper.find(".thinking-indicator").exists()).toBe(true);

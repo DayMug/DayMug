@@ -542,6 +542,14 @@ describe("ChatPage", () => {
     });
   });
 
+  it("stops parked background work through the regular cancel", async () => {
+    currentConversationId.value = "c1";
+    backgroundConversationIds.value = ["c1"];
+    const wrapper = mountChatPage();
+    await wrapper.find("[data-testid='stop-background-btn']").trigger("click");
+    expect(mockState.cancelMessage).toHaveBeenCalledOnce();
+  });
+
   it("inserts into the running task when Send is clicked mid-turn", async () => {
     isThinking.value = true;
     const wrapper = mountChatPage();

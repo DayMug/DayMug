@@ -435,6 +435,7 @@ function onWorkspaceDirectoryChanged(relativePath: string) {
           :clearing-context="clearingContext"
           :is-connected="isConnected"
           @clear-context="handleClearContext"
+          @stop-background="cancelMessage"
         />
       </div>
       <ChatComposer
@@ -568,6 +569,7 @@ function onWorkspaceDirectoryChanged(relativePath: string) {
           :clearing-context="clearingContext"
           :is-connected="isConnected"
           @clear-context="handleClearContext"
+          @stop-background="cancelMessage"
         />
       </div>
       <ChatComposer
