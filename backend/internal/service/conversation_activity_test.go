@@ -152,7 +152,8 @@ func TestConversationActivitySnapshotIncludesResidentBackgroundWork(t *testing.T
 		!reflect.DeepEqual(msg.RunningAgentIDs, []string{"agent"}) {
 		t.Fatalf("resident activity snapshot = %+v", msg)
 	}
-	if len(msg.RunningConversations) != 1 || msg.RunningConversations[0].AccountName != "claude-main" {
+	if len(msg.RunningConversations) != 1 || msg.RunningConversations[0].AccountName != "claude-main" ||
+		!msg.RunningConversations[0].Background {
 		t.Fatalf("resident detail = %+v", msg.RunningConversations)
 	}
 
@@ -163,7 +164,8 @@ func TestConversationActivitySnapshotIncludesResidentBackgroundWork(t *testing.T
 	})
 	defer done()
 	msg = service.ConversationActivitySnapshot(ctx, drainer, s, "owner")
-	if len(msg.RunningConversations) != 1 || msg.RunningConversations[0].AccountName != "foreground-account" {
+	if len(msg.RunningConversations) != 1 || msg.RunningConversations[0].AccountName != "foreground-account" ||
+		msg.RunningConversations[0].Background {
 		t.Fatalf("foreground/resident de-duplication = %+v", msg.RunningConversations)
 	}
 }

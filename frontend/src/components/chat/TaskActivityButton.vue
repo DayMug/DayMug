@@ -27,6 +27,7 @@ interface ActivityRow {
   title: string;
   agentName: string;
   startedAt?: string;
+  background?: boolean;
 }
 
 const { t } = useI18n();
@@ -57,6 +58,7 @@ function liveRows(kind: ActivityKind, source: RunningConversationActivity[]): Ac
       title: conversationTitle(activity.conversation_id, activity.agent_id),
       agentName: activity.agent_name || visibleAgents.value.get(activity.agent_id)?.name || "",
       startedAt: activity.started_at,
+      background: activity.background,
     }));
 }
 
@@ -253,7 +255,11 @@ defineExpose({ close: () => (open.value = false) });
             <span
               class="truncate text-[11px] leading-[16.5px] text-[#777980] dark:text-muted-foreground"
             >
-              {{ t(kindMeta[row.kind].label, { agent: row.agentName }) }}
+              {{
+                t(row.background ? "chat.taskActivityBackground" : kindMeta[row.kind].label, {
+                  agent: row.agentName,
+                })
+              }}
             </span>
           </span>
           <span

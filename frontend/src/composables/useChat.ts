@@ -39,6 +39,7 @@ import {
 import {
   activeAgentIds,
   activeConversationIds,
+  backgroundConversationIds,
   queuedConversations,
   runningAgentIds,
   runningConversationIds,
@@ -499,6 +500,7 @@ export function useChat() {
     runningAgentIds,
     runningConversationIds,
     runningConversations,
+    backgroundConversationIds,
     queuedConversations,
     currentModel,
     conversationProvider,

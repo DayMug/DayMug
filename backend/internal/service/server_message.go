@@ -19,6 +19,11 @@ type RunningConversationActivity struct {
 	AccountName    string    `json:"account_name"`
 	Model          string    `json:"model"`
 	StartedAt      time.Time `json:"started_at"`
+	// Background marks a conversation whose foreground turn has ended but
+	// whose agent process stays parked on work it left running (a background
+	// shell, a monitor). It is still active and will wake on its own, so the
+	// UI says what it is waiting for instead of looking stuck.
+	Background bool `json:"background,omitempty"`
 }
 
 // ServerMessage is the wire shape of every server→client WebSocket event.

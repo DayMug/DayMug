@@ -87,6 +87,19 @@ describe("TaskActivityButton", () => {
     expect(items[2].text()).toContain("Done job");
   });
 
+  it("says when a running conversation is only waiting on background work", async () => {
+    runningConversations.value = [
+      activity("bg", "mine", { background: true }),
+      activity("fg", "mine"),
+    ];
+
+    const wrapper = await openFeed();
+    const items = wrapper.findAll('[data-testid="mobile-activity-item"]');
+
+    expect(items[0].text()).toContain("Waiting on background work · Analyst");
+    expect(items[1].text()).toContain("Running · Analyst");
+  });
+
   it("lists flagged conversations with no live job, questions first", async () => {
     applyAttention(
       [

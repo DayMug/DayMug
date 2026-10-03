@@ -64,6 +64,30 @@ describe("ConversationListPanel", () => {
     expect(row.find('[data-testid="unread-completion-conversation-dot"]').exists()).toBe(false);
   });
 
+  it("shows an hourglass instead of the spinner while parked on background work", () => {
+    const wrapper = mount(ConversationListPanel, {
+      props: {
+        ...baseProps,
+        runningConversationIds: ["c1", "c2"],
+        runningConversations: [
+          {
+            conversation_id: "c2",
+            agent_id: "a",
+            account_name: "acct",
+            model: "m",
+            started_at: "",
+            background: true,
+          },
+        ],
+      },
+    });
+
+    const rows = wrapper.findAll(".conv-row");
+    expect(rows[0].find('[data-testid="conversation-running-spinner"]').exists()).toBe(true);
+    expect(rows[1].find('[data-testid="conversation-background-wait"]').exists()).toBe(true);
+    expect(rows[1].find('[data-testid="conversation-running-spinner"]').exists()).toBe(false);
+  });
+
   it("keeps the delete affordance hidden until the row is hovered", () => {
     const wrapper = mount(ConversationListPanel, {
       props: { ...baseProps, currentConversationId: "c1" },

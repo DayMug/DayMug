@@ -29,8 +29,12 @@ func ConversationActivitySnapshot(ctx context.Context, drainer *Drainer, s store
 	runningConversations := map[string]struct{}{}
 	queuedConversations := map[string]struct{}{}
 	waitingConversations := map[string]struct{}{}
-	jobs := append(drainer.Jobs(), drainer.ResidentActivities()...)
-	for _, job := range jobs {
+	// Foreground jobs come first, so a conversation that has both a live
+	// turn and parked background work is reported by the turn.
+	jobs := drainer.Jobs()
+	foreground := len(jobs)
+	jobs = append(jobs, drainer.ResidentActivities()...)
+	for i, job := range jobs {
 		if job.ConversationID == "" ||
 			(job.Status != JobStatusRunning && job.Status != JobStatusQueued && job.Status != JobStatusWaiting) {
 			continue
@@ -60,6 +64,7 @@ func ConversationActivitySnapshot(ctx context.Context, drainer *Drainer, s store
 			AccountName:    job.AccountName,
 			Model:          conv.Model,
 			StartedAt:      job.StartedAt,
+			Background:     i >= foreground,
 		}
 		if job.Status == JobStatusWaiting {
 			if _, ok := waitingConversations[conv.ID]; ok {

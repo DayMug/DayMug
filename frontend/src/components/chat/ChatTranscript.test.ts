@@ -89,6 +89,19 @@ describe("ChatTranscript", () => {
     expect(wrapper.find(".thinking-indicator").text()).toContain("Ada");
   });
 
+  it("explains a turn that ended with background work still running", () => {
+    const wrapper = mountTranscript({ isWaitingOnBackground: true });
+    expect(wrapper.get('[data-testid="background-wait-indicator"]').text()).toContain(
+      "Ada is waiting for background work",
+    );
+  });
+
+  it("prefers the thinking indicator once the background work wakes the agent", () => {
+    const wrapper = mountTranscript({ isThinking: true, isWaitingOnBackground: true });
+    expect(wrapper.find(".thinking-indicator").exists()).toBe(true);
+    expect(wrapper.find('[data-testid="background-wait-indicator"]').exists()).toBe(false);
+  });
+
   it("renders a tool group folded to its summary header by default", () => {
     const wrapper = mountTranscript({ items: [toolGroup()] });
     expect(wrapper.find(".tool-group-header").exists()).toBe(true);

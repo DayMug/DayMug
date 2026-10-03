@@ -13,6 +13,7 @@
 // state is cleared explicitly when the conversation changes.
 import { ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
+import { Hourglass } from "lucide-vue-next";
 import { Button } from "@/components/ui/button";
 import ChatMessageItem from "./ChatMessageItem.vue";
 import ChatToolGroup from "./ChatToolGroup.vue";
@@ -26,6 +27,8 @@ const props = defineProps<{
   isEmpty: boolean;
   isLoadingMoreHistory: boolean;
   isThinking: boolean;
+  /** Turn finished, agent parked on background work it will wake from. */
+  isWaitingOnBackground?: boolean;
   userLabel: string;
   assistantLabel: string;
   canShowClearContext: boolean;
@@ -114,6 +117,14 @@ function toggleToolGroup(group: ToolGroupItem) {
       <span class="thinking-dots" aria-hidden="true">
         <span>.</span><span>.</span><span>.</span>
       </span>
+    </div>
+    <div
+      v-else-if="isWaitingOnBackground"
+      data-testid="background-wait-indicator"
+      class="flex items-center gap-2 text-muted-foreground text-[13px] py-2"
+    >
+      <Hourglass class="size-3.5 shrink-0" aria-hidden="true" />
+      <span>{{ t("chat.waitingOnBackground", { name: assistantLabel }) }}</span>
     </div>
     <!-- Rotates the underlying session id so the next message starts a fresh CLI
        process with no prior context, while keeping the thread visible. Distinct

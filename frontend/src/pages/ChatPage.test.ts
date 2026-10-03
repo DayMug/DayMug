@@ -85,6 +85,7 @@ type TestConversation = {
 
 const chatMessages = ref<Msg[]>([]);
 const isThinking = ref(false);
+const backgroundConversationIds = ref<string[]>([]);
 const isTurnStatusKnown = ref(true);
 const isConnected = ref(true);
 const contextUsage = ref<{ used: number; total: number } | null>(null);
@@ -144,6 +145,7 @@ const mockState = {
   currentUser,
   authMe,
   isThinking,
+  backgroundConversationIds,
   isTurnStatusKnown,
   isConnected,
   contextUsage,
@@ -229,6 +231,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   chatMessages.value = [];
   isThinking.value = false;
+  backgroundConversationIds.value = [];
   isTurnStatusKnown.value = true;
   isConnected.value = true;
   contextUsage.value = null;
@@ -525,6 +528,18 @@ describe("ChatPage", () => {
     await wrapper.find("[data-testid='send-btn']").trigger("click");
     expect(mockState.sendMessage).toHaveBeenCalledWith("hello");
     expect(requestNotificationPermission).toHaveBeenCalledOnce();
+  });
+
+  it("explains why an idle conversation is still parked on background work", () => {
+    currentConversationId.value = "c1";
+    backgroundConversationIds.value = ["c1"];
+    const wrapper = mountChatPage();
+    expect(wrapper.find("[data-testid='background-wait-indicator']").exists()).toBe(true);
+
+    backgroundConversationIds.value = ["other"];
+    return wrapper.vm.$nextTick().then(() => {
+      expect(wrapper.find("[data-testid='background-wait-indicator']").exists()).toBe(false);
+    });
   });
 
   it("inserts into the running task when Send is clicked mid-turn", async () => {

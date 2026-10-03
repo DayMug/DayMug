@@ -226,6 +226,8 @@ export default {
     // mouse, so a plain drag can't select — hold Shift (⌥ on macOS) to select,
     // then copy with the usual shortcut.
     assistantThinking: "{name} is thinking",
+    waitingOnBackground:
+      "{name} is waiting for background work to finish and will continue on its own",
     back: "Back",
     mobileNavigation: "Workspace navigation",
     mobileConversationsTab: "Sessions",
@@ -236,6 +238,7 @@ export default {
     taskActivityOpen: "Show task activity",
     taskActivityEmpty: "Nothing is running right now",
     taskActivityRunning: "Running · {agent}",
+    taskActivityBackground: "Waiting on background work · {agent}",
     taskActivityQueued: "Waiting for an account · {agent}",
     taskActivityWaiting: "Waiting for your answer · {agent}",
     taskActivityDone: "Finished, result unread · {agent}",
@@ -362,6 +365,8 @@ export default {
     runningAccount: "Account",
     runningModel: "Model",
     runningAgent: "Agent",
+    runningBackgroundTag: "Background",
+    runningBackgroundTitle: "The turn has ended; waiting for the background work it left running",
     runningStarted: "Started",
     queuedSince: "Queued",
     runningSecondsAgo: "{count}s ago",

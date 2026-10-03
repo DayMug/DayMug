@@ -4,6 +4,7 @@ import {
   Coffee,
   Copy,
   FileArchive,
+  Hourglass,
   Link2Off,
   Loader2,
   PanelLeft,
@@ -92,6 +93,17 @@ const searchQuery = ref("");
 const searchLoading = ref(false);
 let fullSearchListLoaded = false;
 let newConversationCooldownTimer: ReturnType<typeof setTimeout> | null = null;
+
+// Parked on background work: still active, but nothing is executing until that
+// work finishes, so it gets a still hourglass instead of the spinner.
+const backgroundConversationIds = computed(
+  () =>
+    new Set(
+      (props.runningConversations ?? [])
+        .filter((activity) => activity.background)
+        .map((activity) => activity.conversation_id),
+    ),
+);
 
 const filteredConversations = computed(() => {
   const query = searchQuery.value.trim().toLocaleLowerCase();
@@ -309,8 +321,13 @@ function conversationTitle(conv: Conversation): string {
                     :class="isTouch ? '' : 'group-hover:opacity-0'"
                     aria-hidden="true"
                   >
+                    <Hourglass
+                      v-if="backgroundConversationIds.has(conv.id)"
+                      data-testid="conversation-background-wait"
+                      class="size-3.5 text-muted-foreground/70"
+                    />
                     <Loader2
-                      v-if="runningConversationIds?.includes(conv.id)"
+                      v-else-if="runningConversationIds?.includes(conv.id)"
                       data-testid="conversation-running-spinner"
                       class="size-3.5 animate-spin text-muted-foreground/70"
                     />

@@ -36,6 +36,7 @@ const {
   currentConversationId,
   chatMessages,
   isThinking,
+  backgroundConversationIds,
   isTurnStatusKnown,
   queuePosition,
   pendingPrompts,
@@ -116,6 +117,15 @@ async function handleClearContext() {
 // is still in progress we leave this false, because poolPosition already carries
 // the more specific "Account busy / Next up" hint for the head entry.
 const hasActiveTask = computed(() => isThinking.value && queuePosition.value === null);
+
+// The turn is over but the agent is parked on background work it started, so
+// the conversation still shows as running everywhere else. Say why here.
+const isWaitingOnBackground = computed(
+  () =>
+    !isThinking.value &&
+    !!currentConversationId.value &&
+    backgroundConversationIds.value.includes(currentConversationId.value),
+);
 
 // Gate the inline "clear context" trigger. The button should be unobtrusive:
 // only surface it when the user could plausibly want it. That means hiding
@@ -418,6 +428,7 @@ function onWorkspaceDirectoryChanged(relativePath: string) {
           :is-empty="chatMessages.length === 0"
           :is-loading-more-history="isLoadingMoreHistory"
           :is-thinking="isThinking"
+          :is-waiting-on-background="isWaitingOnBackground"
           :user-label="userLabel"
           :assistant-label="assistantLabel"
           :can-show-clear-context="canShowClearContext"
@@ -550,6 +561,7 @@ function onWorkspaceDirectoryChanged(relativePath: string) {
           :is-empty="chatMessages.length === 0"
           :is-loading-more-history="isLoadingMoreHistory"
           :is-thinking="isThinking"
+          :is-waiting-on-background="isWaitingOnBackground"
           :user-label="userLabel"
           :assistant-label="assistantLabel"
           :can-show-clear-context="canShowClearContext"

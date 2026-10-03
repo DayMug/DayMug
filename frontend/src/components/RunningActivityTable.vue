@@ -122,6 +122,14 @@ function runningStartedAt(activity: RunningConversationActivity): string {
               data-testid="running-agent-cell"
             >
               {{ runningAgentName(activity) }}
+              <span
+                v-if="activity.background"
+                data-testid="running-background-tag"
+                class="ml-1 rounded bg-white/15 px-1 text-[10px] font-normal text-white/80"
+                :title="t('sidebar.runningBackgroundTitle')"
+              >
+                {{ t("sidebar.runningBackgroundTag") }}
+              </span>
             </td>
             <td class="py-1.5 text-right" data-testid="running-time-cell">
               <time

@@ -17,6 +17,9 @@ export interface RunningConversationActivity {
   account_name: string;
   model: string;
   started_at: string;
+  // The turn has ended but the agent process is parked on background work it
+  // left running; it wakes and continues on its own when that work finishes.
+  background?: boolean;
 }
 
 export const runningConversations = ref<RunningConversationActivity[]>([]);
@@ -45,6 +48,12 @@ export const activeConversationIds = computed(() => [
     ...queuedConversations.value.map((activity) => activity.conversation_id),
   ]),
 ]);
+
+export const backgroundConversationIds = computed(() =>
+  runningConversations.value
+    .filter((activity) => activity.background)
+    .map((activity) => activity.conversation_id),
+);
 
 export function applyConversationActivity(
   agentIds?: string[],
