@@ -364,12 +364,15 @@ async function copyContent() {
         >
           {{ t("chat.userMessageCancelled") }}
         </span>
-        <span
-          v-if="sentTimeLabel"
-          class="msg-sent-at text-[10px] font-normal text-muted-foreground/70"
-          >{{ sentTimeLabel }}</span
-        >
       </div>
+      <!-- The name label above is screen-reader only (the layout already says
+           who is speaking), but the time is information, so it stays visible. -->
+      <time
+        v-if="sentTimeLabel"
+        class="msg-sent-at mb-1 text-[11px] leading-4 text-muted-foreground/70 tabular-nums"
+        :datetime="msg.created_at"
+        >{{ sentTimeLabel }}</time
+      >
       <div
         v-if="msg.cancelled"
         class="msg-content user-bubble user-bubble-cancelled px-3.5 py-2.5 rounded-xl text-[14px] leading-[1.55] break-words bg-[var(--paper-alt)] text-muted-foreground border border-dashed border-muted-foreground/40"
@@ -450,12 +453,13 @@ async function copyContent() {
       >
         {{ t("chat.backgroundWakeup") }}
       </span>
-      <span
-        v-if="sentTimeLabel"
-        class="msg-sent-at text-[10px] font-normal text-muted-foreground/70"
-        >{{ sentTimeLabel }}</span
-      >
     </div>
+    <time
+      v-if="sentTimeLabel"
+      class="msg-sent-at mb-1 block text-[11px] leading-4 text-muted-foreground/70 tabular-nums"
+      :datetime="msg.created_at"
+      >{{ sentTimeLabel }}</time
+    >
     <div
       v-mermaid
       v-code-copy="{ copy: t('chat.copyCode'), copied: t('chat.copied') }"

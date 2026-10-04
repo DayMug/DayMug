@@ -562,6 +562,22 @@ describe("ChatMessageItem", () => {
     expect(wrapper.find(".msg-sent-at").exists()).toBe(true);
   });
 
+  it("keeps the sent time visible while the name header stays screen-reader only", () => {
+    // happy-dom has no layout, so visibility is asserted structurally: the
+    // time must not sit inside the .sr-only header that hides the name.
+    for (const role of ["user", "assistant"] as const) {
+      const wrapper = mount(ChatMessageItem, {
+        props: {
+          msg: { role, content: "x", created_at: new Date().toISOString() },
+          collapsed: false,
+        },
+      });
+      const hint = wrapper.get(".msg-sent-at");
+      expect(hint.element.closest(".sr-only"), role).toBeNull();
+      expect(wrapper.get(".msg-label").element.closest(".sr-only"), role).not.toBeNull();
+    }
+  });
+
   it("omits the sent-at hint when no created_at is supplied so optimistic / pre-stamp rows don't render an empty span", () => {
     const wrapper = mount(ChatMessageItem, {
       props: { msg: { role: "user", content: "hi" }, collapsed: false },
