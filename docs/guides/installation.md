@@ -169,6 +169,25 @@ daymug upgrade --version v0.9.0  # pin a tag (downgrades allowed)
 daymug upgrade --rollback        # roll back to the previous binary
 ```
 
+#### Upgrading from v1.5.x
+
+First back up the database, config and installed binary. Versions older than
+v1.5.109 must upgrade to v1.5.109 and start successfully before continuing.
+Once on v1.5.109, upgrade directly to v0.1.0:
+
+```bash
+~/.daymug/daymug upgrade --version v0.1.0
+```
+
+The new binary finishes the deferred historical migration 94 before applying
+migrations 109–114; no v0.0.1 installation or manual SQL is needed. This path
+requires all other migrations 1–108 to be recorded. If startup reports legacy
+Agent rows still in `users`, resolve their migration into `agents` first rather
+than stamping the missing ledger entry by hand. If the old binary downloads
+updates from a different repository, install the matching binary from the
+`DayMug/DayMug` v0.1.0 Release into the existing installation directory instead,
+keeping its config and database, then restart the service.
+
 On macOS the web upgrade button works too: the LaunchAgent's `KeepAlive` lets the watchdog bring up the new version after the binary is replaced, keeping the health check and automatic rollback. The systemd user unit on Linux works the same way. If you installed with `--skip-service` and run `daymug serve` directly, the binary can still be downloaded and replaced, but with no service manager to handle the restart, the web upgrade is not guaranteed to complete.
 
 ---

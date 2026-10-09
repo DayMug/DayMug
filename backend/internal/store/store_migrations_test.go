@@ -26,9 +26,9 @@ const migrationStepsGoldenPath = "testdata/migration_steps.golden"
 //go:embed testdata/v1.5.109-fresh.sql
 var v1_5_109Fresh string
 
-// ledgerCompleteFinish is what ledgerCompleteRelease did to such a database on
-// its first start: the deferred users cleanup, recorded as version 94. Applied
-// on top of v1_5_109Fresh it yields the oldest database this binary upgrades.
+// ledgerCompleteFinish is what v0.0.1 did to such a database on its first
+// start: the deferred users cleanup, recorded as version 94. Keep this fixture
+// independent of the compatibility migration so it remains a historical oracle.
 var ledgerCompleteFinish = []string{
 	"DROP TRIGGER disable_cron_jobs_for_archived_legacy_agent",
 	"ALTER TABLE users DROP COLUMN skills",
@@ -119,8 +119,7 @@ func openBaselineReleaseDB(t *testing.T, prepare ...string) *SQLiteStore {
 }
 
 // openLedgerCompleteDB returns an un-initialised store holding a baselineRelease
-// database after ledgerCompleteRelease has started on it — the oldest database
-// Init accepts — after prepare has adjusted it.
+// database after v0.0.1 has completed its ledger, after prepare has adjusted it.
 func openLedgerCompleteDB(t *testing.T, prepare ...string) *SQLiteStore {
 	t.Helper()
 	stmts := append([]string{v1_5_109Fresh}, ledgerCompleteFinish...)
@@ -216,7 +215,7 @@ func ledger(t *testing.T, s *SQLiteStore) map[int]appliedMigration {
 	return applied
 }
 
-// A fresh install and an upgrade of a database ledgerCompleteRelease started
+// A fresh install and an upgrade of a database v0.0.1 started
 // must land on the same schema and the same complete ledger, or the two
 // populations drift apart.
 func TestInit_FreshDatabaseMatchesUpgradedRelease(t *testing.T) {
@@ -255,17 +254,17 @@ func TestInit_FreshDatabaseMatchesUpgradedRelease(t *testing.T) {
 	}
 }
 
-// Anything short of a complete 1..baselineVersion ledger is sent back through
-// the releases that complete it rather than guessed at: this binary no longer
-// carries the steps that would close the gap — including the users cleanup
-// that baselineRelease itself left deferred.
-func TestInit_RefusesDatabaseOlderThanLedgerCompleteRelease(t *testing.T) {
+// Only the known deferred cleanup can be finished here. Other gaps must go
+// through baselineRelease rather than being guessed at.
+func TestInit_RefusesDatabaseOlderThanBaselineRelease(t *testing.T) {
 	t.Parallel()
 	for name, tc := range map[string]struct {
 		db      func(t *testing.T) *SQLiteStore
 		missing string
 	}{
-		"deferred users cleanup": {func(t *testing.T) *SQLiteStore { return openBaselineReleaseDB(t) }, "94"},
+		"cleanup and skipped step": {func(t *testing.T) *SQLiteStore {
+			return openBaselineReleaseDB(t, "DELETE FROM schema_migrations WHERE version = 50")
+		}, "50, 94"},
 		"skipped step": {func(t *testing.T) *SQLiteStore {
 			return openLedgerCompleteDB(t, "DELETE FROM schema_migrations WHERE version = 50")
 		}, "50"},
@@ -289,7 +288,6 @@ func TestInit_RefusesDatabaseOlderThanLedgerCompleteRelease(t *testing.T) {
 			}
 			for _, want := range []string{
 				"missing migration(s) " + tc.missing + ")",
-				"daymug upgrade --version " + ledgerCompleteRelease,
 				"daymug upgrade --version " + baselineRelease,
 			} {
 				if !strings.Contains(err.Error(), want) {

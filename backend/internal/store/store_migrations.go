@@ -27,12 +27,10 @@ const (
 	// A database it has not brought up to baselineVersion is sent back
 	// through it.
 	baselineRelease = "v1.5.109"
-	// ledgerCompleteRelease is the first release that records every version
-	// up to baselineVersion: baselineRelease itself left one step (94, the
-	// trim of the Agent-era users columns) deferred, and only this release
-	// finishes it. This binary accepts nothing older.
-	ledgerCompleteRelease = "v0.0.1"
-	baselineMigrationName = "baseline schema"
+	// baselineRelease deferred this step while legacy Agent rows remained in
+	// users. A complete ledger except for this step can be finished here.
+	legacyUserCleanupVersion = 94
+	baselineMigrationName    = "baseline schema"
 )
 
 // migrationStep is one schema change after the baseline. Steps run in slice
@@ -136,6 +134,12 @@ func (s *SQLiteStore) ensureBaseline(ctx context.Context, applied map[int]applie
 	switch {
 	case len(missing) == 0:
 		return nil
+	case len(missing) == 1 && missing[0] == legacyUserCleanupVersion:
+		return s.applyMigration(ctx, legacyUserCleanupVersion, migrationStep{
+			desc:        "trim legacy user agent columns",
+			destructive: true,
+			run:         trimLegacyUserAgentColumns,
+		})
 	case len(missing) == baselineVersion:
 		// An empty ledger is either a new database or one from before the
 		// ledger existed; only the former has no tables yet.
@@ -148,8 +152,8 @@ func (s *SQLiteStore) ensureBaseline(ctx context.Context, applied map[int]applie
 		}
 	}
 	return fmt.Errorf(
-		"database schema predates DayMug %s (missing migration(s) %s); upgrade to it first with `daymug upgrade --version %s` (a database older than %s goes through `daymug upgrade --version %s` before that), let it start once, then upgrade again",
-		ledgerCompleteRelease, formatVersionRanges(missing), ledgerCompleteRelease, baselineRelease, baselineRelease)
+		"database schema predates DayMug %s (missing migration(s) %s); upgrade to it first with `daymug upgrade --version %s`, let it start once, then upgrade again",
+		baselineRelease, formatVersionRanges(missing), baselineRelease)
 }
 
 // createBaseline stamps every folded version, not just one marker: a rollback
