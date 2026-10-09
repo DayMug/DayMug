@@ -1,0 +1,15 @@
+<svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
+  <!-- DayMug "steam prompt": the steam rising off the mug is a terminal
+       prompt — a coding agent working away while the coffee is still hot. -->
+  <defs>
+    <linearGradient id="daymug-bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#5B5CE2"/>
+      <stop offset="1" stop-color="#3B2FB8"/>
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="15" fill="url(#daymug-bg)"/>
+  <path d="M18 10.5l6 5.5-6 5.5" fill="none" stroke="#FFD27A" stroke-width="3.6" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M28.5 21.5h8.5" fill="none" stroke="#FFD27A" stroke-width="3.6" stroke-linecap="round"/>
+  <path d="M13 28h28v10c0 8.2-6 13.5-14 13.5S13 46.2 13 38V28Z" fill="#FFFFFF"/>
+  <path d="M41 31.5h2.5c4 0 6.5 2.6 6.5 6s-2.5 6-6.5 6H41" fill="none" stroke="#FFFFFF" stroke-width="4" stroke-linecap="round"/>
+</svg>

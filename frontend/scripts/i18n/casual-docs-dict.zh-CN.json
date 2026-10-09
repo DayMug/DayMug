@@ -1,0 +1,232 @@
+{
+  "_comment": [
+    "补上游 zh-CN.json 里值为 null 的键(247 条,约占三成)。构建期深合并进词典,",
+    "见 scripts/sync-casual-office.mjs 的 docsDictionary()。",
+    "只补界面上看得见的:AI 面板(chat / writerStatus / selectionAskAi)与协作分享",
+    "(share / presence)在本系统用不到 —— web-llm 的模型下载被 CSP 挡着 —— 不补。",
+    "键必须在上游词典里存在,否则构建失败:拼错一个键不该悄悄变成一条死配置。"
+  ],
+  "dict": {
+    "common": {
+      "ok": "确定",
+      "add": "添加"
+    },
+    "toolbar": {
+      "bookmarks": "书签",
+      "characterSpacing": "字符间距",
+      "continueListNumbering": "接上一列表编号",
+      "fieldAuthor": "作者",
+      "fieldCreateDate": "创建日期",
+      "fieldDate": "日期",
+      "fieldFileName": "文件名",
+      "fieldNumPages": "总页数",
+      "fieldPage": "页码",
+      "fieldSaveDate": "保存日期",
+      "fieldTime": "时间",
+      "insertField": "插入域",
+      "restartListNumbering": "重新开始编号",
+      "sectionBreak": "分节符",
+      "sectionBreakContinuous": "分节符(连续)",
+      "sectionBreakEvenPage": "分节符(偶数页)",
+      "sectionBreakNextPage": "分节符(下一页)",
+      "sectionBreakOddPage": "分节符(奇数页)",
+      "paragraph": "段落",
+      "bordersAndShading": "边框和底纹",
+      "customSpacing": "自定义间距",
+      "footnote": "脚注",
+      "horizontalLine": "水平线",
+      "specialCharacters": "特殊字符",
+      "keyboardShortcuts": "键盘快捷键",
+      "searchMenus": "搜索菜单",
+      "makeCopy": "创建副本",
+      "preferences": "首选项",
+      "tools": "工具",
+      "watermark": "水印",
+      "accessibility": "无障碍",
+      "buildingBlocks": "文档部件",
+      "showFormattingMarks": "显示格式标记",
+      "wordCount": "字数统计",
+      "convertToTable": "转换成表格",
+      "emailAsAttachment": "作为附件发送",
+      "convertToText": "转换成文本",
+      "dictionary": "词典",
+      "translate": "翻译",
+      "explore": "探索",
+      "citations": "引文",
+      "shape": "形状",
+      "shapeArrow": "箭头",
+      "shapeEllipse": "椭圆",
+      "shapeLine": "直线",
+      "shapeRectangle": "矩形",
+      "showOutline": "显示大纲",
+      "versionHistory": "版本历史"
+    },
+    "formattingBar": {
+      "allCaps": "全部大写",
+      "smallCaps": "小型大写",
+      "addComment": "添加批注",
+      "paintFormat": "格式刷"
+    },
+    "dialogs": {
+      "findReplace": { "useRegex": "使用正则表达式" },
+      "pageSetup": { "pageColor": "页面颜色", "pageColorReset": "恢复默认" },
+      "tableProperties": { "bandedColumns": "镶边列", "bandedRows": "镶边行" },
+      "keyboardShortcuts": {
+        "shortcuts": {
+          "bulletList": "项目符号列表",
+          "bulletListDescription": "把当前段落切换成项目符号列表",
+          "commandPalette": "命令面板",
+          "commandPaletteDescription": "打开命令面板",
+          "cycleMode": "切换模式",
+          "cycleModeDescription": "在编辑、修订、查看之间轮换",
+          "dictionary": "词典",
+          "dictionaryDescription": "查选中的词",
+          "startComment": "新建批注",
+          "startCommentDescription": "给选中内容加批注",
+          "wordCount": "字数统计",
+          "wordCountDescription": "打开字数统计窗口",
+          "documentOutline": "文档大纲",
+          "documentOutlineDescription": "切换文档大纲面板",
+          "pageBreak": "分页符",
+          "pageBreakDescription": "在光标处插入分页符",
+          "hyperlink": "超链接",
+          "hyperlinkDescription": "为选中内容插入或编辑超链接"
+        }
+      },
+      "bookmarks": {
+        "title": "书签",
+        "goTo": "定位",
+        "noBookmarks": "还没有书签",
+        "addPlaceholder": "书签名称"
+      },
+      "characterSpacing": {
+        "title": "字符间距",
+        "condensed": "紧缩",
+        "expanded": "加宽",
+        "kerning": "字距调整",
+        "kerningHint": "对不小于指定字号的文字自动调整字距",
+        "kerningThreshold": "字距调整下限",
+        "lowered": "降低",
+        "normal": "标准",
+        "position": "位置",
+        "positionBy": "位移量",
+        "preview": "预览",
+        "previewSample": "字符间距预览示例",
+        "raised": "提升",
+        "scale": "缩放",
+        "spacing": "间距",
+        "spacingBy": "间距值"
+      },
+      "bordersShading": {
+        "title": "边框和底纹",
+        "color": "颜色",
+        "colorHex": "颜色(十六进制)",
+        "fill": "填充",
+        "fillColor": "填充颜色",
+        "fillHex": "填充颜色(十六进制)",
+        "lineStyle": "线型",
+        "noFill": "无填充",
+        "pattern": "图案",
+        "patternClear": "清除",
+        "patternSolid": "实心",
+        "presetBox": "方框",
+        "presetNone": "无",
+        "setting": "设置",
+        "side": { "bottom": "下", "left": "左", "right": "右", "top": "上" },
+        "sides": "边",
+        "style": "样式",
+        "styleDashed": "虚线",
+        "styleDotted": "点线",
+        "styleDouble": "双线",
+        "styleSingle": "单线",
+        "styleThick": "粗线",
+        "styleTriple": "三线",
+        "tabBorders": "边框",
+        "tabShading": "底纹",
+        "widthPt": "宽度(磅)"
+      },
+      "customSpacing": {
+        "title": "自定义间距",
+        "afterPt": "段后(磅)",
+        "atPt": "设置值(磅)",
+        "beforePt": "段前(磅)",
+        "contextualSpacing": "同级段落间不加间距",
+        "keepLines": "段中不分页",
+        "keepNext": "与下段同页",
+        "lineSpacing": "行距",
+        "multipleOf": "多倍行距",
+        "pageBreakBefore": "段前分页",
+        "pagination": "分页",
+        "paragraphSpacing": "段落间距",
+        "rule": "行距规则",
+        "rule_atLeast": "最小值",
+        "rule_auto": "自动",
+        "rule_exact": "固定值",
+        "widowControl": "孤行控制"
+      },
+      "wordCount": {
+        "title": "字数统计",
+        "characters": "字符数(含空格)",
+        "charactersNoSpaces": "字符数(不含空格)",
+        "pages": "页数",
+        "paragraphs": "段落数",
+        "words": "字数",
+        "readingTime": "阅读时长"
+      },
+      "equation": {
+        "title": "公式",
+        "displayLabel": "独立成行",
+        "helper": "用 LaTeX 书写公式,例如 \\frac{a}{b}",
+        "invalidLatex": "LaTeX 语法有误",
+        "previewLabel": "预览",
+        "previewPlaceholder": "公式预览会显示在这里",
+        "renderFailed": "公式渲染失败"
+      }
+    },
+    "comments": { "mentionSuggestions": "提及建议" },
+    "trackedChanges": {
+      "acceptAll": "全部接受",
+      "next": "下一处",
+      "previous": "上一处",
+      "rejectAll": "全部拒绝"
+    },
+    "documentOutline": { "collapse": "折叠", "expand": "展开" },
+    "titleBar": {
+      "allChangesSaved": "所有改动已保存",
+      "saving": "正在保存…",
+      "unsavedChanges": "有改动尚未保存"
+    },
+    "tableAdvanced": {
+      "distributeRows": "平均分布各行",
+      "sortAscending": "升序",
+      "sortDescending": "降序",
+      "autoFitWindow": "根据窗口调整表格"
+    },
+    "editor": { "contentLabel": "文档内容" },
+    "headerFooter": {
+      "differentEvenOdd": "奇偶页不同",
+      "differentFirstPage": "首页不同"
+    },
+    "footnote": { "editEndnoteTitle": "编辑尾注", "editTitle": "编辑脚注" },
+    "statusBar": {
+      "readabilityUnknown": "可读性未知",
+      "readingTime": "阅读时长",
+      "readingTimeAria": "预计阅读时长"
+    },
+    "smartChip": { "date": "日期", "dateHint": "插入日期" },
+    "suggestingBanner": {
+      "title": "修订模式",
+      "body": "你的编辑会记为修订建议,不会直接改动正文。",
+      "switchToEditing": "切换到编辑模式"
+    },
+    "voiceTyping": {
+      "menuItem": "语音输入",
+      "listening": "正在听…",
+      "listeningHint": "说话即可输入,再次点击停止。",
+      "stop": "停止",
+      "error": "语音输入出错",
+      "unsupported": "当前浏览器不支持语音输入"
+    },
+    "rightPanel": { "closeButton": "关闭面板" }
+  }
+}

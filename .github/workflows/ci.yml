@@ -1,0 +1,82 @@
+# Runs the same per-layer pipelines contributors run locally (AGENTS.md,
+# CONTRIBUTING.md) on every pull request, every push to main (including merges)
+# and on release tags; release.yml builds the release from the same tag.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.sum
+
+      - name: Build
+        run: go build ./...
+
+      - name: Test
+        run: go test ./...
+
+      - uses: golangci/golangci-lint-action@v9
+        with:
+          version: v2.4.0
+          working-directory: backend
+
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+
+      # Same packageManager pin corepack uses locally (see release.yml).
+      - uses: pnpm/action-setup@v6
+        with:
+          package_json_file: frontend/package.json
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      # `pnpm build` = vue-tsc typecheck + production bundle.
+      - name: Build
+        run: pnpm build
+
+      - name: Test
+        run: pnpm test
+
+      # `pnpm lint` runs with --fix locally; CI only reports.
+      - name: Lint
+        run: pnpm exec eslint .
+
+      - name: API contract
+        run: pnpm api-contract:check
+
+      - name: Locale parity
+        run: pnpm i18n:check

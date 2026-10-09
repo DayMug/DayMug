@@ -1,0 +1,354 @@
+name: Build and Publish Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to build (e.g. v1.2.3). Defaults to the ref the workflow runs against."
+        required: false
+
+# Replacing the same tag makes an in-flight validation/release obsolete.
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: true
+
+# contents: write lets the job's GITHUB_TOKEN create the GitHub Release.
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          # When dispatched with an explicit tag, check out that exact commit
+          # so a re-run rebuilds the tagged code rather than whatever branch
+          # tip the dispatch ran against. Empty (the tag-push
+          # path) falls back to the triggering ref.
+          ref: ${{ inputs.tag }}
+          # Need full history + tags so we can derive recent_releases from
+          # git log between consecutive tags. A shallow clone only carries
+          # the tip and would leave the manifest with empty release notes.
+          fetch-depth: 0
+
+      - name: Resolve tag and build targets
+        id: tag
+        run: |
+          set -euo pipefail
+          TAG="${{ inputs.tag }}"
+          if [ -z "$TAG" ]; then
+            TAG="${GITHUB_REF_NAME}"
+          fi
+          if [ -z "$TAG" ]; then
+            echo "no tag resolved" >&2
+            exit 1
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+          # Every later step (build, checksums, manifest, GitHub Release)
+          # iterates this one list so a target can't be built but not shipped.
+          TARGETS="linux/amd64 linux/arm64 darwin/arm64"
+          echo "TARGETS=${TARGETS}" >> "$GITHUB_ENV"
+          echo "resolved: tag=${TAG} targets=${TARGETS}"
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+
+      # The pnpm version comes from frontend/package.json's packageManager
+      # pin — the same one corepack picks for local development — so CI and a
+      # developer resolve the lockfile with the identical pnpm.
+      - uses: pnpm/action-setup@v6
+        with:
+          package_json_file: frontend/package.json
+
+      # Build the frontend once; dist/ is then embedded into all enabled Go
+      # binaries. Validation belongs to the normal CI path, not release builds.
+      - name: Build frontend
+        working-directory: frontend
+        env:
+          APP_VERSION: ${{ steps.tag.outputs.tag }}
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm build
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.sum
+
+      # ubuntu-latest has no upx; installed into a PATH entry this job owns.
+      - name: Install upx
+        run: |
+          set -euo pipefail
+          if command -v upx >/dev/null 2>&1; then
+            echo "upx already on PATH: $(command -v upx)"
+            exit 0
+          fi
+          case "$(uname -m)" in
+            x86_64) UPX_ARCH=amd64 ;;
+            aarch64|arm64) UPX_ARCH=arm64 ;;
+            *) echo "no upx build for $(uname -m)" >&2; exit 1 ;;
+          esac
+          TMP="$(mktemp -d)"
+          curl -fsSL "https://github.com/upx/upx/releases/download/v4.2.4/upx-4.2.4-${UPX_ARCH}_linux.tar.xz" -o "$TMP/upx.tar.xz"
+          tar -xJf "$TMP/upx.tar.xz" -C "$TMP"
+          mkdir -p "$HOME/.local/bin"
+          install -m 0755 "$TMP/upx-4.2.4-${UPX_ARCH}_linux/upx" "$HOME/.local/bin/upx"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          rm -rf "$TMP"
+
+      # Cross-compile the enabled targets in one job. modernc/sqlite is pure
+      # Go, so CGO_ENABLED=0 works for every target. Go reuses module + build
+      # caches across the loop so only the first iteration pays full cost.
+      - name: Build binaries
+        working-directory: backend
+        env:
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          set -euo pipefail
+          rm -rf ./cmd/server/dist
+          cp -r ../frontend/dist ./cmd/server/dist
+
+          # The binary self-upgrades from the repository that built it, so a
+          # fork's releases follow the fork rather than upstream.
+          MANIFEST_URL="https://github.com/${GITHUB_REPOSITORY}/releases/latest/download/manifest.json"
+          LDFLAGS="-s -w -X main.Version=${TAG} -X github.com/DayMug/DayMug/backend/internal/service.DefaultManifestURL=${MANIFEST_URL}"
+          echo "building targets: ${TARGETS}"
+
+          # Gzip-precompress JS/CSS (the bulk of the ~20MB dist) and drop the
+          # raw originals before embedding. The static handler serves the .gz
+          # bytes with Content-Encoding: gzip — so the embedded FS (and thus
+          # every binary) shrinks ~13MB, and clients get smaller payloads too.
+          # gzip -9 -n replaces foo.js with foo.js.gz; -n keeps it reproducible.
+          find ./cmd/server/dist/assets -type f \( -name '*.js' -o -name '*.css' \) \
+            -exec gzip -9 -n {} +
+
+          for combo in ${TARGETS}; do
+            GOOS="${combo%/*}"
+            GOARCH="${combo#*/}"
+            OUT="../daymug-${GOOS}-${GOARCH}"
+            echo "==> building ${GOOS}/${GOARCH}"
+            CGO_ENABLED=0 GOOS="$GOOS" GOARCH="$GOARCH" \
+              go build -trimpath -tags embed_frontend \
+              -ldflags "${LDFLAGS}" \
+              -o "$OUT" \
+              ./cmd/server
+            # UPX shrinks the linux/amd64 binary ~60%. Not applied to darwin: a
+            # UPX-packed Mach-O fails Apple code signing / Gatekeeper, and the
+            # sign-and-notarize step below would reject it. Not applied to
+            # linux/arm64 either: arm64 Linux hosts commonly run 16K/64K-page
+            # kernels (Raspberry Pi 5, Asahi, some ARM servers), where UPX
+            # stubs have a history of failing to start, and nothing in this
+            # pipeline can execute an arm64 binary to catch that.
+            if [ "$GOOS" = "linux" ] && [ "$GOARCH" = "amd64" ]; then
+              echo "==> upx ${OUT}"
+              upx -q --best "$OUT" >/dev/null
+            fi
+            # sha256 is computed last so it covers the final (UPX-packed for
+            # linux/amd64) artifact that actually gets uploaded and hash-verified.
+            sha256sum "$OUT" | awk '{print $1}' > "${OUT}.sha256"
+          done
+
+      - name: Install quill
+        run: |
+          if command -v quill >/dev/null 2>&1; then
+            echo "quill already on PATH: $(command -v quill)"
+            exit 0
+          fi
+          # Anchore's quill signs (and optionally notarizes) macOS binaries
+          # from any platform — no Apple toolchain required.
+          curl -sSfL https://get.anchore.io/quill | sudo sh -s -- -b /usr/local/bin
+
+      - name: Sign and notarize macOS binary
+        env:
+          # Secrets store the P12 / .p8 as base64 because GitHub Secrets are
+          # text; we decode to temp files below and hand quill real paths,
+          # which sidesteps any ambiguity in how quill parses the env var.
+          QUILL_SIGN_P12_B64: ${{ secrets.QUILL_SIGN_P12 }}
+          QUILL_SIGN_PASSWORD: ${{ secrets.QUILL_SIGN_PASSWORD }}
+          QUILL_NOTARY_KEY_B64: ${{ secrets.QUILL_NOTARY_KEY }}
+          QUILL_NOTARY_KEY_ID: ${{ secrets.QUILL_NOTARY_KEY_ID }}
+          QUILL_NOTARY_ISSUER: ${{ secrets.QUILL_NOTARY_ISSUER }}
+        run: |
+          set -euo pipefail
+          OUT="daymug-darwin-arm64"
+          if [ -z "${QUILL_SIGN_P12_B64:-}" ]; then
+            echo "QUILL_SIGN_P12 secret not configured; skipping macOS code signing." >&2
+            exit 0
+          fi
+
+          WORK="$(mktemp -d)"
+          trap 'rm -rf "$WORK"' EXIT
+
+          # Decode a base64 secret to a file. Strip whitespace first (mac's
+          # `base64` wraps at 76 chars, GitHub UI may sneak in BOMs / stray
+          # chars on paste) then use --ignore-garbage so any leftover
+          # non-alphabet bytes don't abort the decode.
+          decode_secret_to_file() {
+            local label="$1" b64="$2" out="$3"
+            printf '%s' "$b64" | tr -d '[:space:]' | base64 --decode --ignore-garbage > "$out" || {
+              echo "${label}: base64 decode failed — secret is not valid base64." >&2
+              return 1
+            }
+            if [ ! -s "$out" ]; then
+              echo "${label}: decoded file is empty — secret is not valid base64." >&2
+              return 1
+            fi
+          }
+
+          P12_PATH="$WORK/cert.p12"
+          decode_secret_to_file "QUILL_SIGN_P12" "$QUILL_SIGN_P12_B64" "$P12_PATH"
+          # PKCS#12 starts with an ASN.1 SEQUENCE — first byte 0x30. Catch
+          # the common mistake of pasting raw PEM / a path / random text.
+          first_byte=$(head -c 1 "$P12_PATH" | od -An -tx1 | tr -d ' \n')
+          if [ "$first_byte" != "30" ]; then
+            echo "QUILL_SIGN_P12: decoded blob is not a PKCS#12 file (first byte: 0x${first_byte:-??}, expected 0x30)." >&2
+            echo "Re-export the cert with: openssl pkcs12 -export -in cert.pem -out cert-modern.p12" >&2
+            echo "Then re-encode with:    base64 -i cert-modern.p12 | pbcopy" >&2
+            exit 1
+          fi
+          export QUILL_SIGN_P12="$P12_PATH"
+
+          if [ -n "${QUILL_NOTARY_KEY_B64:-}" ]; then
+            KEY_PATH="$WORK/notary.p8"
+            # Accept the .p8 pasted as-is as well as base64 of it.
+            if printf '%s' "$QUILL_NOTARY_KEY_B64" | command grep -q -- '-----BEGIN'; then
+              printf '%s\n' "$QUILL_NOTARY_KEY_B64" > "$KEY_PATH"
+            else
+              decode_secret_to_file "QUILL_NOTARY_KEY" "$QUILL_NOTARY_KEY_B64" "$KEY_PATH"
+            fi
+            if ! command grep -q -- '-----BEGIN PRIVATE KEY-----' "$KEY_PATH"; then
+              echo "QUILL_NOTARY_KEY: not an App Store Connect .p8 key (no 'BEGIN PRIVATE KEY' header)." >&2
+              echo "Store the AuthKey_<id>.p8 contents, raw or as: base64 -i AuthKey_<id>.p8 | tr -d '\\n'" >&2
+              exit 1
+            fi
+            export QUILL_NOTARY_KEY="$KEY_PATH"
+            quill sign-and-notarize "$OUT"
+          else
+            echo "QUILL_NOTARY_KEY not set; signing only (Gatekeeper will still warn on first launch)." >&2
+            quill sign "$OUT"
+          fi
+          # Signing rewrites the binary, so refresh the sha256 sidecar to
+          # keep manifest verification (and the upgrader's hash check) honest.
+          sha256sum "$OUT" | awk '{print $1}' > "${OUT}.sha256"
+
+      # One `sha256sum -c`-compatible file for the GitHub Release, written
+      # after signing so it covers the exact bytes being published.
+      - name: Write checksums.txt
+        run: |
+          set -euo pipefail
+          FILES=()
+          for combo in ${TARGETS}; do
+            FILES+=("daymug-${combo%/*}-${combo#*/}")
+          done
+          sha256sum "${FILES[@]}" > checksums.txt
+          cat checksums.txt
+
+      - name: Build recent_releases payload from git
+        id: recent
+        env:
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          set -euo pipefail
+          # The 5 newest tags plus the newest tag of each of the 5 newest
+          # minor lines, each with its commit subjects (chore:/docs:/ci:
+          # filtered) — see scripts/recent_releases.py.
+          mkdir -p out
+          python3 scripts/recent_releases.py > out/recent_releases.json
+          echo "recent_releases written:"
+          cat out/recent_releases.json
+
+      # manifest.json is what install.sh and every running server's
+      # self-upgrader read: releases/latest/download/manifest.json for the
+      # newest release, releases/download/<tag>/manifest.json when pinned.
+      # Binary URLs are the tag's immutable download URLs, and GitHub keeps
+      # every release, so any manifest ever published stays installable.
+      - name: Write manifest.json
+        env:
+          TAG: ${{ steps.tag.outputs.tag }}
+        run: |
+          set -euo pipefail
+          BASE="https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}"
+          BINARIES='{}'
+          for combo in ${TARGETS}; do
+            NAME="daymug-${combo%/*}-${combo#*/}"
+            BINARIES="$(printf '%s' "${BINARIES}" | jq \
+              --arg key "${combo}" \
+              --arg url "${BASE}/${NAME}" \
+              --arg sha "$(cat "${NAME}.sha256")" \
+              '. + {($key): {url: $url, sha256: $sha}}')"
+          done
+
+          RECENT_FILE="out/recent_releases.json"
+          if [ ! -s "${RECENT_FILE}" ]; then
+            echo "[]" > "${RECENT_FILE}"
+          fi
+
+          jq -n \
+            --arg version "${TAG}" \
+            --arg released_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            --argjson binaries "${BINARIES}" \
+            --slurpfile recent "${RECENT_FILE}" \
+            '{
+              version: $version,
+              released_at: $released_at,
+              binaries: $binaries,
+              recent_releases: $recent[0]
+            }' > manifest.json
+          cat manifest.json
+
+      - name: Publish GitHub Release
+        env:
+          TAG: ${{ steps.tag.outputs.tag }}
+          GH_REPO: ${{ github.repository }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          ASSETS=()
+          for combo in ${TARGETS}; do
+            ASSETS+=("daymug-${combo%/*}-${combo#*/}")
+          done
+          ASSETS+=(checksums.txt manifest.json scripts/install.sh config.example.yaml)
+
+          # Same commit subjects the self-upgrade panel shows for this tag
+          # (chore:/docs:/ci: already filtered out by the recent_releases step).
+          NOTES="$(jq -r --arg tag "${TAG}" \
+            '(.[] | select(.version == $tag) | .notes) // []
+             | map("- \(.subject) (\(.hash))") | join("\n")' \
+            out/recent_releases.json 2>/dev/null || true)"
+          {
+            if [ -n "${NOTES}" ]; then
+              printf '%s\n' "${NOTES}"
+            else
+              echo "Maintenance release."
+            fi
+            echo
+            echo "Install or upgrade:"
+            echo
+            echo '```bash'
+            echo "curl -fsSL https://github.com/${GH_REPO}/releases/latest/download/install.sh | bash"
+            echo '```'
+            echo
+            echo "Verify a download with \`sha256sum -c checksums.txt --ignore-missing\`."
+          } > out/release-notes.md
+
+          # Re-running a tag (e.g. via workflow_dispatch) must refresh the
+          # assets of the existing release, not fail on it. A new release is
+          # created with every asset in one call, so gh uploads them to a
+          # draft and publishes it last: releases/latest/download/ never
+          # resolves to a release that is missing its manifest.
+          if gh release view "${TAG}" >/dev/null 2>&1; then
+            echo "release ${TAG} exists in ${GH_REPO}; replacing assets"
+            gh release upload "${TAG}" "${ASSETS[@]}" --clobber
+          else
+            gh release create "${TAG}" "${ASSETS[@]}" \
+              --title "${TAG}" \
+              --notes-file out/release-notes.md \
+              --target "$(git rev-parse HEAD)" \
+              --latest
+          fi

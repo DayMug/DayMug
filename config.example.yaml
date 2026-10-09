@@ -1,0 +1,354 @@
+# =============================================================================
+# DayMug server configuration
+#
+# Drop this file as `config.yaml` next to the running binary for zero-env-var
+# setup, or point `--config` / `DAYMUG_CONFIG` at any path you prefer. Those
+# three sources are tried in that order; if none resolves, the server refuses
+# to start.
+#
+# Read once at startup — there is no hot reload. After editing:
+#   systemctl --user restart daymug.service              # Linux service
+#   launchctl kickstart -k "gui/$(id -u)/com.daymug.daymug"   # macOS service
+#   restart the `air` / `serve` process                  # local dev
+#
+# Every field below is optional unless marked REQUIRED. Field-by-field notes
+# live in docs/guides/configuration.md.
+#
+# Not configurable here, on purpose:
+#   - SQLite path — always <binary_dir>/data/database.db.
+#   - Release manifest URL for self-upgrade — hard-coded server-side.
+#   - Per-user provider bindings and sandbox exemptions — database rows,
+#     managed from the admin UI.
+# =============================================================================
+
+
+# -----------------------------------------------------------------------------
+# server — where the process listens and how the outside world addresses it
+# -----------------------------------------------------------------------------
+server:
+  # Listen address. Use 127.0.0.1:<port> when a reverse proxy on the same host
+  # fronts it; :<port> or 0.0.0.0:<port> to expose directly (for HTTPS see
+  # auth.cookie_secure). `daymug bootstrap` writes 127.0.0.1:8090; the
+  # compiled-in fallback for a config that omits the key is :8080.
+  addr: "127.0.0.1:8090"
+
+  # Externally-reachable base URL users open the app at — the domain your
+  # reverse proxy or tunnel serves. Strongly recommended: push notifications
+  # (Bark) carry a deep link built from it, so tapping one opens the
+  # conversation. Leave it empty and pushes still arrive, but TAPPING THEM
+  # DOES NOTHING. Trailing slash optional.
+  # public_url: "https://daymug.example.com"
+
+
+# -----------------------------------------------------------------------------
+# auth — browser session lifetime and which login methods are open
+# -----------------------------------------------------------------------------
+auth:
+  # How long a successful login stays valid. Go duration syntax ("720h" = 30
+  # days). The session cookie's max-age tracks this value.
+  session_ttl: 720h
+
+  # Force the Secure flag on the session cookie. false does NOT mean "never
+  # Secure": the flag is also set whenever the request itself arrived over
+  # HTTPS (direct TLS, or a proxy forwarding X-Forwarded-Proto: https). Set
+  # true only when TLS terminates at a proxy that drops that header.
+  cookie_secure: false
+
+  # Username + password login. Disable when only OIDC should grant access.
+  password_login_enabled: true
+
+
+# -----------------------------------------------------------------------------
+# admin — recovery hatch for administrator access
+# -----------------------------------------------------------------------------
+admin:
+  # Usernames here are re-promoted to is_admin=true on every restart. If you
+  # ever demote every admin, add yourself and restart.
+  bootstrap_usernames:
+    - admin
+
+
+# -----------------------------------------------------------------------------
+# users — home directory root and per-user concurrency
+# -----------------------------------------------------------------------------
+users:
+  # Global root holding every user's home. New human users default to
+  # <default_home_root>/<username> as their work directory; an admin can
+  # override the per-user path from the user edit form, but the root itself is
+  # config-only (the admin UI shows it read-only). A leading `~/` expands to
+  # the server user's home, and the resolved value must be absolute.
+  default_home_root: ~/.daymug/users
+
+  # Maximum tasks one user may run simultaneously across all provider accounts
+  # and all entry points (web, API, IM, /compact). Extra tasks queue. Values
+  # below 1 are treated as unset. Default 4.
+  max_concurrent: 4
+
+
+# -----------------------------------------------------------------------------
+# runner — how agent child processes are supervised
+# -----------------------------------------------------------------------------
+
+# stdout-silence watchdog:
+#   runner_stall_timeout      — how long stdout may be silent before DayMug
+#                               probes the process tree's CPU time and the CLI
+#                               session log for signs of life.
+#   runner_max_silent_timeout — hard ceiling on one silent stretch, even while
+#                               the probe keeps reporting activity.
+# The probe is what stops a long-running sub-agent or tool that simply has
+# nothing to print from being killed for being quiet.
+runner_stall_timeout: 10m
+runner_max_silent_timeout: 2h
+
+# Total wall-clock cap on one IM-triggered (Slack / 飞书 / Telegram / 微信)
+# turn. 0s — the default — means no cap: a healthy long task keeps running, and
+# a genuinely stuck one is still caught by the watchdog above or cancelled from
+# the web UI. Set 2h, 6h, etc. only if you must bound how long a single turn
+# can hold an account slot.
+im_run_timeout: 0s
+
+
+# -----------------------------------------------------------------------------
+# guardrails — soft reminders for unusually expensive top-level user inputs
+#
+# "One turn" is everything a single Web / IM user message triggers; each new
+# message starts from zero. Model requests and tool calls count the parent agent
+# only — sub-agent work is not counted. A turn is never paused or cancelled.
+# If it reaches a threshold, the next user message shows one reminder and then
+# continues normally. Cron and provider-initiated turns stay silent.
+#
+# Any usage threshold set to 0 is disabled on its own. Negative values are
+# rejected at startup. The effective values are printed in the startup log.
+# -----------------------------------------------------------------------------
+guardrails:
+  # Parent-agent model requests that schedule a reminder for the next message.
+  max_model_calls_per_turn: 50
+
+  # Real tool invocations that schedule a reminder (a tool result is not
+  # counted again).
+  max_tool_calls_per_turn: 100
+
+  # Estimated USD spend per turn, from provider usage reports. 0 — the
+  # default — disables the cost threshold.
+  max_cost_usd_per_turn: 0
+
+
+# -----------------------------------------------------------------------------
+# retention — automatic cleanup of old data
+# -----------------------------------------------------------------------------
+# Every field defaults to 0, which disables that cleanup: out of the box DayMug
+# never deletes a conversation, a deleted conversation's rows, or an upload on
+# its own. Values are Go durations (no "d" unit: 336h = 14 days). The
+# conversation sweeps run in the background every 6 hours.
+# -----------------------------------------------------------------------------
+retention:
+  # Delete conversations with no activity for this long, exactly as if the
+  # owner had deleted them. Pinned conversations are always kept.
+  inactive_conversations: 0     # e.g. 336h = 14 days
+
+  # Erase deleted users, agents and conversations (with their messages) this
+  # long after deletion. Until then an operator can still recover them in SQL.
+  deleted_conversations: 0      # e.g. 168h = 7 days
+
+  # Delete uploaded files (web and chat-app attachments) older than this, the
+  # next time something is uploaded to the same folder. Old conversations that
+  # show those files will then show broken links.
+  uploads: 0                    # e.g. 720h = 30 days
+
+
+# -----------------------------------------------------------------------------
+# context pressure — when a session gets compacted or retired
+# -----------------------------------------------------------------------------
+
+# Run /compact automatically once a finished turn leaves the session's context
+# at or above this fraction (used / total): the summary stays in history and
+# session_id rotates, so the next turn starts clean. 0 — the default — keeps
+# compaction manual. Must be in [0, 1); >= 1 can never fire, so it is rejected
+# at startup rather than accepted as a threshold that silently never runs.
+#
+# A ratio rather than a token count because the threshold has to mean the same
+# thing across windows that differ by an order of magnitude — a 200k claude
+# session and a 1M codex session should compact under equal *relative*
+# pressure.
+#
+# What it buys: cache_read. Every tool step inside a turn re-reads the whole
+# resident context, so a long session pays that over and over. 0.6-0.7 is a
+# reasonable starting point.
+auto_compact_ratio: 0
+
+# Case-file mode (a per-Agent toggle) retires an IM thread's session once its
+# context passes this fraction of the window, and assembles the next turn fresh
+# from the case document. Omit the key to use the built-in 0.70. Range (0, 1).
+#
+# 0 here means "unset", not "disabled" — unlike auto_compact_ratio. A case-mode
+# thread that never rotates lets context grow with turn count again, which is
+# the exact problem case mode exists to solve. To stop rotating, turn case mode
+# off on the Agent.
+#
+# Lower is cheaper: the longer a session lives, the more every turn pays in
+# cache_read, and in practice that is the single largest line in the bill. Push
+# it too low and the agent gets cut off before it has finished curating the
+# case — and the case is everything the next session receives. Measure the real
+# occupancy distribution of your threads before moving it.
+case_rotate_context_ratio: 0.70
+
+
+# Provider accounts do not live in YAML. Add, delete, order, and edit
+# credential pools, model ids, summary models, and token pricing from
+# Admin settings -> Providers & models. They are stored in SQLite and changes
+# apply immediately.
+
+
+# -----------------------------------------------------------------------------
+# sandbox — per-process isolation around each agent invocation
+#
+#   type: noop   — no isolation; the agent inherits the server user's full
+#                  filesystem reach (the historical behaviour).
+#   type: bwrap  — Linux bubblewrap jail. Users whose sandbox_mode is
+#                  "unrestricted" (set per-user from the admin Users page,
+#                  individually or in bulk) run unwrapped; everyone else is
+#                  confined to their work_dir — other users' files, the central
+#                  DayMug DB, and host secrets are simply not mapped into the
+#                  namespace.
+#
+# bwrap requires the `bwrap` binary on PATH. If it is missing the server logs a
+# SECURITY warning and starts anyway with NO isolation — an optional binary must
+# not be able to take a live deployment offline — so check the startup log after
+# enabling this.
+#
+# network / extra_ro_binds / extra_rw_binds only apply to bwrap. The bind lists
+# are absolute host paths every jailed agent may additionally read (RO) or write
+# (RW) on top of its own work_dir, e.g. a shared assets directory.
+# -----------------------------------------------------------------------------
+sandbox:
+  enabled: false
+  type: noop
+  network: true
+  extra_ro_binds: []
+  extra_rw_binds: []
+
+
+# -----------------------------------------------------------------------------
+# oidc — optional Casdoor / generic OpenID Connect single sign-on
+#
+# With `enabled: false` (the default) every other field here is ignored and only
+# username + password login is available. With `enabled: true`, issuer /
+# client_id / client_secret / redirect_uri become mandatory and are validated at
+# startup; failing to discover the issuer at boot is fatal, so misconfiguration
+# surfaces immediately instead of at the first login attempt.
+#
+# The flow is Authorization Code with state + nonce. The id_token is verified
+# (signature + iss + aud + exp + nonce), userinfo is fetched server-side, and
+# both feed the access decision plus optional auto-provisioning. The local user
+# is matched by email — create the row ahead of time from the admin UI (with
+# `auto_provision: false`), or let the first login provision it.
+#
+# Casdoor application setup:
+#   - Token format: JWT-Standard (small id_token; authorization data lives on
+#     userinfo)
+#   - Grant types: authorization_code + refresh_token
+#   - Redirect URLs: must match `redirect_uri` below character-for-character
+#   - Scopes: openid + profile + email — `profile` is what makes groups / roles
+#     / permissions appear on userinfo, so do not drop it
+#   - Permission / Role / Group: pick whichever maps best to your access model
+#     and put the matching strings in `required_*` below
+# -----------------------------------------------------------------------------
+oidc:
+  enabled: false
+
+  # Discovery hits <issuer>/.well-known/openid-configuration to learn the
+  # authorize / token / userinfo / jwks endpoints. Don't hardcode paths.
+  issuer: https://idp.example.com
+
+  # Treat client_secret as a secret — keep this file chmod 0600, or inject the
+  # value some other way.
+  client_id: ""
+  client_secret: ""
+
+  # Must equal the public URL the SPA reaches the server on, plus
+  # /api/auth/oidc/callback.
+  redirect_uri: https://daymug.example.com/api/auth/oidc/callback
+
+  scopes: ["openid", "profile", "email"]
+
+  # Claim names. Override only if your IdP puts the values somewhere other than
+  # the standard claim keys.
+  group_claim: groups
+  role_claim: roles
+  permission_claim: permissions
+
+  # Access policy. Each non-empty list adds a dimension; the user must satisfy
+  # >=1 entry in >=1 dimension (OR across dimensions). All three empty = any
+  # IdP-authenticated user is allowed in, gated only by auto_provision below.
+  required_groups: []
+  required_roles: []
+  required_permissions: []
+    # Casdoor "Permission" route, recommended:
+    # - daymug
+
+  # Auto-provision a local user the first time an OIDC identity logs in with no
+  # matching local row. Username derives from preferred_username (then the email
+  # local-part, then sub) with a numeric suffix on collision; work_dir is rooted
+  # under users.default_home_root. Set false to keep a closed allowlist.
+  auto_provision: true
+
+  # Label on the SSO button on the login page.
+  button_label: "Sign in with Casdoor"
+
+
+# -----------------------------------------------------------------------------
+# upgrade — self-upgrade and its rollback watchdog
+#
+# The admin UI's "Check for updates" button fetches the release manifest,
+# downloads and sha256-verifies the matching binary, swaps it atomically,
+# restarts the service, and rolls back automatically if the new binary fails its
+# post-restart health check. The manifest URL is hard-coded server-side; only
+# the deployment-specific knobs live here, and all of them are optional.
+# -----------------------------------------------------------------------------
+upgrade:
+  # Service unit name to restart after a successful swap.
+  service: daymug
+  # "user" runs `systemctl --user restart <service>` (and the macOS LaunchAgent
+  # equivalent); "system" drops the --user flag for a root systemd unit.
+  service_mode: user
+  # Path the watchdog polls on localhost — the host:port half is derived from
+  # the running server's listen address, so only the path goes here. No 200
+  # within health_timeout and the watchdog restores the previous binary.
+  health_path: "/api/health"
+  health_timeout: 60s
+
+
+# -----------------------------------------------------------------------------
+# usage — per-day token/cost rollup
+#
+# Settings → Usage aggregates every turn into one row per (user, model, day);
+# `timezone` decides which midnight that day boundary means. IANA names
+# ("Asia/Shanghai", "America/New_York", "Europe/Berlin"), or "UTC" / "Local".
+# Omitted or empty defaults to Asia/Shanghai. An unrecognised name is a startup
+# error, so a typo surfaces before any row is stamped with the wrong bucket.
+#
+# Switching the timezone after data exists does not migrate older rows: they
+# keep the day label they were stamped with. Expect a one-day overlap of
+# differently-bucketed rows on the day of the switch.
+#
+# The remaining keys are the thresholds Settings → Usage uses to flag a
+# conversation in its ranking. They only colour the report. The `guardrails`
+# section above separately schedules a reminder for the user's next message;
+# neither mechanism interrupts a running task. A value of 0 or below falls back
+# to the default shown, so these cannot be switched off.
+# -----------------------------------------------------------------------------
+usage:
+  timezone: "Asia/Shanghai"
+
+  # Flag a conversation whose busiest single turn made more model requests /
+  # tool calls than this.
+  high_model_requests: 20
+  high_tool_calls: 30
+
+  # Flag a conversation whose total cost in the selected range exceeds this
+  # many USD.
+  high_conversation_cost_usd: 10
+
+  # Flag a conversation whose context occupancy (used / window) reached this
+  # fraction. Must be <= 1.
+  context_warning_ratio: 0.8

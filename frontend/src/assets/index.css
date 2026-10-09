@@ -1,0 +1,583 @@
+@import "@fontsource-variable/inter";
+
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "highlight.js/styles/github.min.css";
+
+@custom-variant dark (&:is(.dark *));
+
+/* highlight.js dark mode overrides (github-dark palette) */
+@layer base {
+  .dark .hljs {
+    background: transparent;
+    color: #e6edf3;
+  }
+  .dark .hljs-comment,
+  .dark .hljs-quote {
+    color: #8b949e;
+  }
+  .dark .hljs-keyword,
+  .dark .hljs-selector-tag,
+  .dark .hljs-type {
+    color: #ff7b72;
+  }
+  .dark .hljs-string,
+  .dark .hljs-addition {
+    color: #a5d6ff;
+  }
+  .dark .hljs-number,
+  .dark .hljs-literal {
+    color: #79c0ff;
+  }
+  .dark .hljs-title,
+  .dark .hljs-section,
+  .dark .hljs-name {
+    color: #d2a8ff;
+  }
+  .dark .hljs-built_in {
+    color: #ffa657;
+  }
+  .dark .hljs-attr,
+  .dark .hljs-attribute {
+    color: #79c0ff;
+  }
+  .dark .hljs-symbol,
+  .dark .hljs-bullet {
+    color: #ffa657;
+  }
+  .dark .hljs-deletion {
+    color: #ffa198;
+    background: #490202;
+  }
+  .dark .hljs-emphasis {
+    font-style: italic;
+  }
+  .dark .hljs-strong {
+    font-weight: bold;
+  }
+}
+
+/* Conversation / agent attention dot: blue = finished unseen, yellow =
+   waiting on the user's answer, red = failed. The ring in the page background
+   colour separates the dot from an avatar or a selected row behind it. */
+.attention-dot {
+  box-shadow: 0 0 0 1.5px var(--background);
+  pointer-events: none;
+}
+.attention-dot[data-attention="done"] {
+  background: #3b82f6;
+}
+.attention-dot[data-attention="waiting"] {
+  background: #f5a524;
+}
+.attention-dot[data-attention="error"] {
+  background: #ef4444;
+}
+
+/* Keep every enabled semantic control on the pointer cursor, including its
+   nested icon and label nodes. Without the descendant rule the final hit node
+   can fall back to the browser arrow once the mouse stops moving. */
+:where(
+  a[href],
+  button:not(:disabled),
+  input:not(:disabled):where(
+      [type="button"],
+      [type="submit"],
+      [type="reset"],
+      [type="checkbox"],
+      [type="radio"],
+      [type="file"]
+    ),
+  label[for],
+  select:not(:disabled),
+  summary,
+  [role="button"]:not([aria-disabled="true"]),
+  [role="checkbox"]:not([aria-disabled="true"]),
+  [role="link"]:not([aria-disabled="true"]),
+  [role="menuitem"]:not([aria-disabled="true"]),
+  [role="option"]:not([aria-disabled="true"]),
+  [role="radio"]:not([aria-disabled="true"]),
+  [role="switch"]:not([aria-disabled="true"]),
+  [role="tab"]:not([aria-disabled="true"])
+),
+:where(
+    a[href],
+    button:not(:disabled),
+    input:not(:disabled):where(
+        [type="button"],
+        [type="submit"],
+        [type="reset"],
+        [type="checkbox"],
+        [type="radio"],
+        [type="file"]
+      ),
+    label[for],
+    select:not(:disabled),
+    summary,
+    [role="button"]:not([aria-disabled="true"]),
+    [role="checkbox"]:not([aria-disabled="true"]),
+    [role="link"]:not([aria-disabled="true"]),
+    [role="menuitem"]:not([aria-disabled="true"]),
+    [role="option"]:not([aria-disabled="true"]),
+    [role="radio"]:not([aria-disabled="true"]),
+    [role="switch"]:not([aria-disabled="true"]),
+    [role="tab"]:not([aria-disabled="true"])
+  )
+  :where(*) {
+  cursor: pointer;
+}
+
+/* Interactive rows contain text, SVGs, badges, and native controls whose
+   browser defaults do not always agree on a cursor. Keep a single cursor for
+   the whole hit surface so crossing those descendants cannot flash between
+   arrow and pointer while the mouse is moving. Editable descendants retain
+   the text cursor used for inline rename. */
+:where([data-cursor-surface="pointer"], .cursor-pointer):where(:not(:disabled)),
+:where([data-cursor-surface="pointer"], .cursor-pointer):where(:not(:disabled)) :where(*) {
+  cursor: pointer;
+}
+
+:where([data-cursor-surface="pointer"], .cursor-pointer)
+  :where(input, textarea, [contenteditable="true"]),
+:where([data-cursor-surface="pointer"], .cursor-pointer)
+  :where(input, textarea, [contenteditable="true"])
+  :where(*) {
+  cursor: text;
+}
+
+/* Padding around the composer textarea is still part of the typing surface.
+   Giving the pill the same cursor removes the arrow flash at its inner edges;
+   enabled buttons keep their explicit pointer cursor. */
+[data-cursor-surface="text"] {
+  cursor: text;
+}
+
+@theme inline {
+  /* CJK families come before system-ui: on Linux system-ui resolves to a
+   * single-weight CJK face (WenQuanYi), so bold Chinese rendered as regular.
+   * macOS and Windows land on the same PingFang / YaHei either way. */
+  --font-sans:
+    "Inter Variable", Inter, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei",
+    "Noto Sans CJK SC", "Noto Sans SC", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+
+  /* Neutral ramp used by app-specific surfaces when the shadcn semantic
+   * tokens do not provide enough contrast steps.
+   */
+  --color-ink-2: var(--ink-2);
+  --color-ink-3: var(--ink-3);
+  --color-ink-4: var(--ink-4);
+  --color-ink-5: var(--ink-5);
+  --color-paper-alt: var(--paper-alt);
+  --color-edge-soft: var(--edge-soft);
+  --color-rule: var(--rule);
+  --color-accent-soft: var(--accent-soft);
+}
+
+:root {
+  /* 8px base, as in the Iris reference: rows, buttons, tabs and icon hit
+   * areas sit at rounded-lg (8px); only the composer and cards step up to
+   * rounded-xl (12px). */
+  --radius: 0.5rem;
+
+  /* DayMug is deliberately achromatic: hierarchy comes from contrast,
+   * typography, spacing, and borders rather than decorative color. */
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.13 0 0);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.13 0 0);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.13 0 0);
+
+  --primary: oklch(0.13 0 0);
+  --primary-foreground: oklch(0.985 0 0);
+
+  --secondary: oklch(0.965 0 0);
+  --secondary-foreground: oklch(0.2 0 0);
+  --muted: oklch(0.965 0 0);
+  --muted-foreground: oklch(0.47 0 0);
+  --accent: oklch(0.94 0 0);
+  --accent-foreground: oklch(0.13 0 0);
+
+  --destructive: oklch(0.62 0.22 25);
+  /* Swipe-to-delete action background. A warmer coral-red that reads as
+     "delete" but sits better against the cool-gray sidebar than the harsh
+     primary destructive red; paired with a white icon. */
+  --swipe-delete: oklch(0.64 0.17 20);
+
+  --border: oklch(0.88 0 0);
+  --input: oklch(0.88 0 0);
+  --ring: oklch(0.13 0 0);
+
+  --chart-1: oklch(0.16 0 0);
+  --chart-2: oklch(0.34 0 0);
+  --chart-3: oklch(0.5 0 0);
+  --chart-4: oklch(0.66 0 0);
+  --chart-5: oklch(0.8 0 0);
+
+  --sidebar: oklch(0.975 0 0);
+  --sidebar-foreground: oklch(0.13 0 0);
+  --sidebar-primary: oklch(0.13 0 0);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.92 0 0);
+  --sidebar-accent-foreground: oklch(0.13 0 0);
+  --sidebar-border: oklch(0.86 0 0);
+  --sidebar-ring: oklch(0.13 0 0);
+
+  --ink-2: oklch(0.25 0 0);
+  --ink-3: oklch(0.45 0 0);
+  --ink-4: oklch(0.62 0 0);
+  --ink-5: oklch(0.76 0 0);
+  --paper-alt: oklch(0.965 0 0);
+  --edge-soft: oklch(0.92 0 0);
+  --rule: oklch(0.82 0 0);
+  --accent-soft: oklch(0.92 0 0);
+
+  /* Running indicators — the agent avatar's rotating ring and the conversation
+   * row's progress bar. Both are a faint track plus a bright travelling
+   * highlight, and both have to invert with the theme. These cannot be written
+   * once and left to resolve per theme: a var() inside a custom property is
+   * substituted where the property is declared, so `.dark` has to restate them.
+   */
+  --running-highlight: var(--sidebar-primary);
+  --running-track: color-mix(in oklch, var(--sidebar-primary) 14%, transparent);
+  --running-glow: color-mix(in oklch, var(--sidebar-primary) 60%, transparent);
+  --running-ring-track: color-mix(in oklch, var(--sidebar) 72%, transparent);
+}
+
+.dark {
+  --background: oklch(0.09 0 0);
+  --foreground: oklch(0.985 0 0);
+  --card: oklch(0.13 0 0);
+  --card-foreground: oklch(0.985 0 0);
+  --popover: oklch(0.13 0 0);
+  --popover-foreground: oklch(0.985 0 0);
+  --primary: oklch(0.985 0 0);
+  --primary-foreground: oklch(0.13 0 0);
+  --secondary: oklch(0.2 0 0);
+  --secondary-foreground: oklch(0.985 0 0);
+  --muted: oklch(0.2 0 0);
+  --muted-foreground: oklch(0.708 0 0);
+  --accent: oklch(0.24 0 0);
+  --accent-foreground: oklch(0.985 0 0);
+  --destructive: oklch(0.704 0.191 22.216);
+  --swipe-delete: oklch(0.55 0.16 20);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: oklch(0.8 0 0);
+  --chart-1: oklch(0.92 0 0);
+  --chart-2: oklch(0.76 0 0);
+  --chart-3: oklch(0.6 0 0);
+  --chart-4: oklch(0.44 0 0);
+  --chart-5: oklch(0.3 0 0);
+  --sidebar: oklch(0.12 0 0);
+  --sidebar-foreground: oklch(0.985 0 0);
+  --sidebar-primary: oklch(0.985 0 0);
+  --sidebar-primary-foreground: oklch(0.13 0 0);
+  --sidebar-accent: oklch(0.22 0 0);
+  --sidebar-accent-foreground: oklch(0.985 0 0);
+  --sidebar-border: oklch(1 0 0 / 10%);
+  --sidebar-ring: oklch(0.556 0 0);
+
+  --ink-2: oklch(0.92 0 0);
+  --ink-3: oklch(0.78 0 0);
+  --ink-4: oklch(0.62 0 0);
+  --ink-5: oklch(0.48 0 0);
+  --paper-alt: oklch(0.205 0 0);
+  --edge-soft: oklch(0.25 0 0);
+  --rule: oklch(0.32 0 0);
+  --accent-soft: oklch(0.25 0 0);
+
+  /* A 14% track disappears into a near-black row, and the 60% bloom smears the
+   * 2px bar; a denser track and a tighter glow keep the bar's extent readable.
+   */
+  --running-highlight: var(--sidebar-primary);
+  --running-track: color-mix(in oklch, var(--sidebar-primary) 26%, transparent);
+  --running-glow: color-mix(in oklch, var(--sidebar-primary) 42%, transparent);
+  --running-ring-track: color-mix(in oklch, var(--sidebar) 72%, transparent);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  html,
+  body {
+    /* DayMug is an app-like SPA: every scrollable surface manages its own
+       scroll. Mobile Safari / Chrome otherwise treat a downward overscroll at
+       the top of the document as a pull-to-refresh, which reloads the page
+       (most visibly on the settings screens, whose shell scrolls internally
+       and chains its overscroll up to the document). Kill the native gesture
+       at the root — internal scrollers keep their own overscroll-contain. */
+    overscroll-behavior-y: none;
+  }
+  body {
+    @apply bg-background text-foreground font-sans;
+    letter-spacing: -0.012em;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  ::selection {
+    background-color: var(--foreground);
+    color: var(--background);
+  }
+  .dark ::selection {
+    background-color: var(--foreground);
+    color: var(--background);
+  }
+  /* Keep textarea selection legible inside the elevated composer surface. */
+  .composer-input::selection {
+    background-color: var(--foreground);
+    color: var(--background);
+  }
+  /* Inverted surfaces must opt into their own selection palette. The global
+     light-theme selection uses dark foreground text, which is unreadable when
+     inherited by black overlays such as tooltips. This shared contract fixes
+     every TooltipContent instance and can be reused by future dark surfaces. */
+  [data-inverted-surface]::selection,
+  [data-inverted-surface] ::selection {
+    background-color: oklch(0.92 0 0);
+    color: oklch(0.13 0 0);
+  }
+  :focus-visible {
+    outline-color: var(--ring);
+  }
+}
+
+/* ─── Editorial form sections ───────────────────────────────────────
+ * Two-column layout on desktop: an oversized roman numeral + serif-italic
+ * title in the left rail, fields stacked in the right column. Used by
+ * UserForm and any settings pane that wants the same rhythm. Defined at
+ * the global layer (not scoped) so slotted advanced sections from parent
+ * pages can re-use the same classes.
+ */
+.form-section {
+  display: grid;
+  gap: 1.75rem;
+  padding: 2rem 0;
+  border-top: 1px solid var(--edge-soft);
+}
+@media (min-width: 768px) {
+  .form-section {
+    grid-template-columns: 180px 1fr;
+  }
+}
+.form-section-head {
+  align-self: start;
+}
+.form-section-roman {
+  font-style: italic;
+  font-size: 28px;
+  line-height: 1;
+  color: var(--primary);
+  margin-bottom: 8px;
+  letter-spacing: -0.5px;
+}
+.form-section-title {
+  font-size: 22px;
+  letter-spacing: -0.4px;
+  color: var(--foreground);
+  font-weight: 600;
+}
+.form-section-sub {
+  margin-top: 6px;
+  font-size: 13px;
+  color: var(--muted-foreground);
+  line-height: 1.5;
+}
+.form-section-body {
+  display: flex;
+  flex-direction: column;
+  gap: 1.125rem;
+}
+.field-label {
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted-foreground);
+  margin-bottom: 0.375rem;
+}
+
+/* ─── Scrollbars ────────────────────────────────────────────────────
+ * Quiet monochrome scrollbars keep dense workspace panels from gaining
+ * a second, unrelated visual language.
+ *
+ * Apply globally to the app body, with an explicit `.wy-scroll` opt-in
+ * for components that want a tighter version inside cards (chat panel,
+ * session list, workspace grid).
+ */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--rule) transparent;
+}
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+*::-webkit-scrollbar-thumb {
+  background-color: var(--ink-5);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background-color: var(--ink-4);
+  background-clip: content-box;
+}
+*::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* `wy-scroll` — tighter thumb for in-panel scrolling (chat, sessions,
+ * workspace grid). Same visual language, narrower track. */
+.wy-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: var(--ink-5) transparent;
+}
+.wy-scroll::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.wy-scroll::-webkit-scrollbar-thumb {
+  background-color: var(--ink-5);
+  border-radius: 999px;
+  border: 0;
+  background-clip: padding-box;
+}
+.wy-scroll::-webkit-scrollbar-thumb:hover {
+  background-color: var(--ink-4);
+}
+
+/* Code-editor look for raw JSON / config textareas. Mirrors UI design's
+ * MCP block: ink panel with warm-paper text, mono font, slight border
+ * highlight on focus. */
+.mcp-editor {
+  background: oklch(0.12 0 0) !important;
+  color: oklch(0.94 0 0) !important;
+  border-color: oklch(0.28 0 0) !important;
+  caret-color: var(--primary);
+}
+.mcp-editor::placeholder {
+  color: oklch(0.55 0.012 260) !important;
+}
+.mcp-editor:focus-visible {
+  outline-color: var(--primary);
+}
+
+/* ─── Touch-device baseline ─────────────────────────────────────────
+ * Fixes that can only be made globally, because they are about how the browser
+ * itself treats the page on a phone or tablet rather than about any one
+ * component. The document-level pull-to-refresh, the other member of this
+ * family, is already killed in the base layer above.
+ */
+@layer base {
+  html {
+    /* iOS inflates body text by its own factor after a rotation, which
+     * re-breaks a transcript the reader had already found their place in. */
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+  }
+  body {
+    /* The grey flash iOS/Android paint on tap sits on top of our own pressed
+     * states, so a tapped conversation row briefly reads as two different
+     * highlights at once. */
+    -webkit-tap-highlight-color: transparent;
+  }
+}
+
+/* iOS Safari zooms the whole page in when a focused field is smaller than 16px,
+ * and never zooms back out on blur — from the first tap on the composer the
+ * entire app stays magnified and horizontally scrollable. The viewport tag
+ * carries `maximum-scale=1`, which historically suppressed this, but iOS has
+ * treated scale limits as an accessibility violation to be ignored since iOS
+ * 10 and the suppression can no longer be relied on. Sizing the field itself is
+ * the fix that does not depend on which iOS is reading the page.
+ *
+ * Deliberately outside `@layer base`: unlayered rules outrank every layer, and
+ * the sizes to beat are Tailwind utilities like `text-sm` in the utilities
+ * layer. A field that genuinely wants to be larger raises the floor by setting
+ * --daymug-input-font-size rather than by losing a specificity race.
+ *
+ * Keyed on `pointer: coarse`, not on width: an iPad in landscape is 1024px+ and
+ * would slip past a width test while still being the device that zooms.
+ */
+@media (pointer: coarse) {
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+  select,
+  textarea,
+  /* A line-number gutter is a separate element painted alongside a textarea,
+   * so raising only the field would slide the numbers out of register with the
+   * lines they count. It has to move with the field, not be exempted from it. */
+  [data-line-gutter] {
+    font-size: max(16px, var(--daymug-input-font-size, 0px));
+  }
+}
+
+/* Vestibular safety net. Kept at a hair above zero rather than `none` so that
+ * transitions still complete and still fire `transitionend`: nothing listens
+ * for it today, but a future affordance that does should not silently stall
+ * for the users who asked for less motion. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Transcript rows other than the newest: a long conversation holds hundreds
+ * of rendered markdown blocks, and without this every one of them is laid out
+ * and painted on each streaming frame. `auto` in the intrinsic size makes the
+ * browser remember a row's real height once it has rendered, so scrollHeight
+ * (and the scroll pinning/prepend math built on it) stays stable as rows move
+ * in and out of view; 200px is only the guess for never-seen rows. The row's
+ * own margins still collapse with its neighbours — containment only stops
+ * collapse with its children. */
+.chat-row-deferrable {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 200px;
+}

@@ -1,0 +1,6 @@
+109	additive	convert legacy JSON env values to VAR=VAL lines
+110	additive	delete bot_threads rows with a bare platform
+111	destructive	drop users.archived_at, conversations.archived, agents.permission_rules, agents.source
+112	destructive	fold agents.skills into role_definition and drop the column
+113	destructive	drop the external HTTP API: api_tokens, api_session_costs, users.allow_api
+114	destructive	drop published sites: served_directories, users.serve_slug, agents.serve_slug
