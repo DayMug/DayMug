@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, defineAsyncComponent, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
-import { Download, PanelRightOpen, PencilLine, X } from "lucide-vue-next";
+import { Download, ExternalLink, PanelRightOpen, PencilLine, X } from "lucide-vue-next";
 
 import FilePreview from "@/components/FilePreview.vue";
 import FileIcon from "@/components/FileIcon.vue";
@@ -45,6 +45,10 @@ const props = withDefaults(
     // Artifact panels render their own persistent file tabs above this
     // workbench; standalone/editor hosts keep the built-in tab strip.
     showTabs?: boolean;
+    // "Open in new tab" affordance. The chat panel shows it so a file can be
+    // taken out of the cramped side panel into a full browser tab; the
+    // preview page already is that tab and hides it.
+    showOpenInNewTab?: boolean;
   }>(),
   {
     editMode: false,
@@ -54,6 +58,7 @@ const props = withDefaults(
     enableQuickOpen: true,
     showPanelExpand: false,
     showTabs: true,
+    showOpenInNewTab: false,
   },
 );
 
@@ -65,6 +70,9 @@ const emit = defineEmits<{
   "update:editMode": [on: boolean];
   close: [];
   expandPanel: [];
+  // The workbench has no router of its own; the host turns the path into the
+  // preview-page URL and opens it.
+  openInNewTab: [path: string];
 }>();
 
 const { t } = useI18n();
@@ -506,6 +514,17 @@ watch(
           @click="goToEditor"
           ><PencilLine :size="13" />{{ t("common.edit") }}</Button
         >
+        <button
+          v-if="path && showOpenInNewTab"
+          type="button"
+          class="grid size-7 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-[#efeff1] hover:text-foreground dark:hover:bg-[#242424]"
+          :title="t('files.workbench.openInNewTab')"
+          :aria-label="t('files.workbench.openInNewTab')"
+          data-testid="workbench-open-new-tab"
+          @click="emit('openInNewTab', path)"
+        >
+          <ExternalLink :size="16" />
+        </button>
         <a
           v-if="path"
           :href="downloadFileUrl(props.userId, path)"
@@ -564,6 +583,17 @@ watch(
           >{{ saving ? t("files.spreadsheet.saving") : t("files.spreadsheet.save") }}</Button
         >
         <span v-else class="text-xs text-muted-foreground">{{ officeReadOnlyNote }}</span>
+        <button
+          v-if="path && showOpenInNewTab"
+          type="button"
+          class="grid size-7 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-[#efeff1] hover:text-foreground dark:hover:bg-[#242424]"
+          :title="t('files.workbench.openInNewTab')"
+          :aria-label="t('files.workbench.openInNewTab')"
+          data-testid="workbench-open-new-tab"
+          @click="emit('openInNewTab', path)"
+        >
+          <ExternalLink :size="16" />
+        </button>
         <Button
           v-if="path"
           variant="outline"

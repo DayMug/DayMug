@@ -418,6 +418,7 @@ export default {
   },
   files: {
     workbench: {
+      openInNewTab: "在新标签页打开",
       close: "关闭文件面板",
       closeDirtyConfirm: "文件有未保存的修改，仍要关闭文件面板吗？",
       diskChanged: "文件已在磁盘上变更",

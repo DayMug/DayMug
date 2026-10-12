@@ -459,6 +459,7 @@ export default {
   },
   files: {
     workbench: {
+      openInNewTab: "Open in new tab",
       close: "Close file panel",
       closeDirtyConfirm: "There are unsaved changes. Close the file panel anyway?",
       diskChanged: "This file changed on disk",

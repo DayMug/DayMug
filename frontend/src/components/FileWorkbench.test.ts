@@ -273,6 +273,26 @@ describe("FileWorkbench", () => {
     expect(withClose.find('[data-testid="workbench-close"]').exists()).toBe(true);
   });
 
+  it("offers open-in-new-tab only when the host asks for it", async () => {
+    const without = await mountWorkbench({ path: "a.md" });
+    expect(without.find('[data-testid="workbench-open-new-tab"]').exists()).toBe(false);
+
+    const withButton = await mountWorkbench({ path: "a.md", showOpenInNewTab: true });
+    expect(withButton.find('[data-testid="workbench-open-new-tab"]').exists()).toBe(true);
+  });
+
+  it("hands the current path to the host when open-in-new-tab is clicked", async () => {
+    const wrapper = await mountWorkbench({ path: "docs/a.md", showOpenInNewTab: true });
+    await wrapper.find('[data-testid="workbench-open-new-tab"]').trigger("click");
+    expect(wrapper.emitted("openInNewTab")).toEqual([["docs/a.md"]]);
+  });
+
+  it("keeps open-in-new-tab in the office header too", async () => {
+    const wrapper = await mountWorkbench({ path: "sales.xlsx", showOpenInNewTab: true });
+    await wrapper.find('[data-testid="workbench-open-new-tab"]').trigger("click");
+    expect(wrapper.emitted("openInNewTab")).toEqual([["sales.xlsx"]]);
+  });
+
   it("emits close when the X is clicked", async () => {
     const wrapper = await mountWorkbench({ path: "a.md", showClose: true });
     await wrapper.find('[data-testid="workbench-close"]').trigger("click");

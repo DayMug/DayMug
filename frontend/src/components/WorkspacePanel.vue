@@ -871,8 +871,10 @@ watch(
       :enable-quick-open="false"
       :show-tabs="false"
       storage-scope="artifacts"
+      show-open-in-new-tab
       @open="({ path }) => void activateArtifact(path)"
       @update:edit-mode="artifactEditMode = $event"
+      @open-in-new-tab="openPreviewInNewTab"
     />
 
     <WorkspaceUploadProgress

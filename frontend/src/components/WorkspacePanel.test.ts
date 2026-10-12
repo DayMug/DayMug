@@ -2444,6 +2444,29 @@ describe("WorkspacePanel", () => {
       expect(wrapper.emitted("open-file")).toBeUndefined();
     });
 
+    it("opens the panel's file in a new browser tab from the workbench header", async () => {
+      const wrapper = mountPanelSync({
+        props: { userId: "u1", conversationId: "c1", fileOpenTarget: "panel" },
+      });
+      await flushPromises();
+      await wrapper.get('.file-row[data-entry-name="summary.md"]').trigger("click");
+      await flushPromises();
+
+      const openSpy = vi.spyOn(window, "open").mockReturnValue(null);
+      try {
+        await wrapper.get('[data-testid="workbench-open-new-tab"]').trigger("click");
+        expect(openSpy).toHaveBeenCalledTimes(1);
+        const href = openSpy.mock.calls[0][0] as string;
+        expect(href).toContain("/file/u1");
+        expect(href).toContain("path=summary.md");
+        expect(openSpy.mock.calls[0][1]).toBe("_blank");
+        // The panel keeps showing the file; only a new tab was opened.
+        expect(wrapper.findComponent({ name: "FileWorkbench" }).props("path")).toBe("summary.md");
+      } finally {
+        openSpy.mockRestore();
+      }
+    });
+
     it("opens a file with one click like the reference artifact browser", async () => {
       const wrapper = mountPanelSync({
         props: { userId: "u1", conversationId: "c1", fileOpenTarget: "panel" },
