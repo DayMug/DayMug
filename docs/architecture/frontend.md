@@ -101,9 +101,14 @@ Several constraints **found by testing**; read the header comment of `host.ts` b
 - The upstream parser doesn't accept `.xls` / `.ods` (it only takes OOXML zip), so they are converted to xlsx via SheetJS and opened **read-only**.
 
 For on-disk change sync see `composables/useFileWatch.ts` and `files/watch` in the [API reference](api-reference.md).
-In edit mode with unsaved local changes, it **does not overwrite automatically**; it shows a banner letting the user choose
-"Reload / Keep my changes". A silent reload would swallow what the user is writing, which is the one thing this feature must never
-get wrong.
+Text, code, Markdown and HTML previews preserve their scroll position on watch refresh. Text previews keep the old content mounted
+until the new read and syntax highlighting finish, so a loading placeholder cannot collapse the scroll range.
+
+In edit mode, an external content change **never reloads automatically**, including a clean buffer. A banner outside the content scroller
+lets the user choose "Discard mine and reload / Keep my changes" and remains visible when editing the end of a long file. Notices belong
+to individual buffers and survive switching away and back. Own-save notifications are identified by comparing disk content against the
+last loaded/saved version after any in-flight save completes. Keeping a text buffer adopts the external ETag as its next save precondition,
+so a subsequent external write still conflicts. Office editors compare raw bytes and pause writes while a disk conflict needs a decision.
 
 ### Editor buffer model
 

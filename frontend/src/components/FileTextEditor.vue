@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { useConfirm } from "@/composables/useConfirm";
 
 import { EditorView, type ViewUpdate } from "@codemirror/view";
-import type { EditorState, StateEffect, Text } from "@codemirror/state";
+import { Text, type EditorState, type StateEffect } from "@codemirror/state";
 import {
   compartments,
   createBufferState,
@@ -35,6 +35,7 @@ const emit = defineEmits<{
   // exposed because the parent renders it, and a template ref into a child's
   // computed is the fiddlier half of that contract.
   dirtyPaths: [paths: string[]];
+  saved: [path: string];
 }>();
 
 const { readFile, writeFile } = useFileApi();
@@ -66,6 +67,9 @@ interface Buffer {
   scroll: StateEffect<unknown> | null;
 }
 const buffers = new Map<string, Buffer>();
+const diskVersions = new Map<string, { doc: Text; etag: string }>();
+const pendingSaves = new Map<string, Promise<void>>();
+const diskChecks = new Map<string, number>();
 
 interface FileState {
   dirty: boolean;
@@ -382,6 +386,13 @@ async function save(force = false) {
   // whole point, and the previous attempt's message must not latch the button.
   if (saving.value || !path || !buf || !st || !state || st.loadError) return;
   saving.value = true;
+  let finishSave!: () => void;
+  pendingSaves.set(
+    path,
+    new Promise<void>((resolve) => {
+      finishSave = resolve;
+    }),
+  );
   st.saveError = "";
   try {
     const result = await writeFile(
@@ -399,6 +410,8 @@ async function save(force = false) {
     st.conflict = false;
     st.savedAt = Date.now();
     syncDirty(path);
+    diskVersions.delete(path);
+    emit("saved", path);
   } catch (e) {
     if (e instanceof WriteConflictError) {
       st.conflict = true;
@@ -410,6 +423,8 @@ async function save(force = false) {
     }
   } finally {
     saving.value = false;
+    pendingSaves.delete(path);
+    finishSave();
   }
 }
 
@@ -450,6 +465,8 @@ async function reloadBuffer(path: string) {
     const res = await readFile(props.userId, path);
     const text = await res.text();
     buf.etag = res.headers.get("ETag") ?? "";
+    diskVersions.delete(path);
+    diskChecks.set(path, (diskChecks.get(path) ?? 0) + 1);
     // A fresh state, not an edit: undoing past a reload into content that
     // is no longer on disk would only manufacture a conflict.
     const state = newBufferState(text);
@@ -473,6 +490,48 @@ async function reloadBuffer(path: string) {
   }
 }
 
+// Watch notifications carry no writer identity. Compare against the last
+// saved document, waiting for our own in-flight save before classifying it.
+// Never install the fetched text into the editor until the user chooses it.
+async function checkDiskChange(path: string): Promise<boolean> {
+  const buf = buffers.get(path);
+  if (!buf) return false;
+  const run = (diskChecks.get(path) ?? 0) + 1;
+  diskChecks.set(path, run);
+  // If a save starts during the read, retry against its completed version.
+  let baseline: Text;
+  let res: Awaited<ReturnType<typeof readFile>>;
+  let doc: Text;
+  do {
+    await pendingSaves.get(path);
+    baseline = buf.savedDoc;
+    res = await readFile(props.userId, path);
+    doc = Text.of((await res.text()).split(/\r\n?|\n/));
+    await pendingSaves.get(path);
+    if (buffers.get(path) !== buf || diskChecks.get(path) !== run) return false;
+  } while (baseline !== buf.savedDoc);
+  const etag = res.headers.get("ETag") ?? "";
+  if (buf.savedDoc.eq(doc)) {
+    buf.etag = etag;
+    return false;
+  }
+  diskVersions.set(path, { doc, etag });
+  return true;
+}
+
+function keepLocalVersion(path: string) {
+  const buf = buffers.get(path);
+  const disk = diskVersions.get(path);
+  if (!buf || !disk) return;
+  // Accept only the version shown in the notice. A later write still fails
+  // If-Match instead of being overwritten without another decision.
+  buf.etag = disk.etag;
+  buf.savedDoc = disk.doc;
+  ensureState(path).conflict = false;
+  diskVersions.delete(path);
+  syncDirty(path);
+}
+
 // Whether a specific buffer holds unsaved edits. The workbench asks before
 // letting a disk change overwrite anything.
 function isDirty(path: string): boolean {
@@ -490,6 +549,8 @@ function closeFile(path: string) {
     }
     buffers.delete(path);
   }
+  diskVersions.delete(path);
+  diskChecks.delete(path);
   delete fileState.value[path];
 }
 
@@ -575,7 +636,7 @@ onBeforeUnmount(() => {
   editor.value = null;
 });
 
-defineExpose({ closeFile, reloadFile: reloadBuffer, isDirty });
+defineExpose({ closeFile, reloadFile: reloadBuffer, isDirty, checkDiskChange, keepLocalVersion });
 
 const savedLabel = computed(() => {
   if (!savedAt.value) return "";

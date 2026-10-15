@@ -422,7 +422,7 @@ export default {
       close: "关闭文件面板",
       closeDirtyConfirm: "文件有未保存的修改，仍要关闭文件面板吗？",
       diskChanged: "文件已在磁盘上变更",
-      reload: "重新加载",
+      reload: "丢弃我的修改并重新加载",
       keepMine: "保留我的修改",
       removed: "文件已从磁盘上删除",
     },

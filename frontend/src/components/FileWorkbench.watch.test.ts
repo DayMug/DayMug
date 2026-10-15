@@ -30,7 +30,7 @@ vi.mock("@/composables/useFileWatch", () => ({
   },
 }));
 
-const previewStub = vi.hoisted(() => ({ refreshed: 0 }));
+const previewStub = vi.hoisted(() => ({ refreshed: 0, external: true, kept: 0 }));
 vi.mock("@/components/FilePreview.vue", () => ({
   // eslint-disable-next-line vue/one-component-per-file
   default: defineComponent({
@@ -42,6 +42,8 @@ vi.mock("@/components/FilePreview.vue", () => ({
         },
         save: async () => true,
         isDirty: () => false,
+        checkDiskChange: async () => previewStub.external,
+        keepLocalVersion: () => previewStub.kept++,
       });
       return () => h("div", { "data-testid": "file-preview-stub" }, "file-preview-stub");
     },
@@ -52,6 +54,8 @@ const editorStub = vi.hoisted(() => ({
   dirty: new Set<string>(),
   reloaded: [] as string[],
   closed: [] as string[],
+  kept: [] as string[],
+  external: true,
 }));
 vi.mock("@/components/FileTextEditor.vue", () => ({
   __isTeleport: false,
@@ -73,6 +77,8 @@ vi.mock("@/components/FileTextEditor.vue", () => ({
           editorStub.dirty.delete(path);
         },
         isDirty: (path: string) => editorStub.dirty.has(path),
+        checkDiskChange: async () => editorStub.external,
+        keepLocalVersion: (path: string) => editorStub.kept.push(path),
       });
       return () => h("div", { "data-testid": "file-text-editor-stub" }, `editor:${props.path}`);
     },
@@ -117,9 +123,13 @@ describe("FileWorkbench disk sync", () => {
   beforeEach(() => {
     sessionStorage.clear();
     previewStub.refreshed = 0;
+    previewStub.external = true;
+    previewStub.kept = 0;
     editorStub.dirty.clear();
     editorStub.reloaded.length = 0;
     editorStub.closed.length = 0;
+    editorStub.kept.length = 0;
+    editorStub.external = true;
     watchHooks.onChanged = null;
     watchHooks.onRemoved = null;
   });
@@ -143,12 +153,52 @@ describe("FileWorkbench disk sync", () => {
     expect(previewStub.refreshed).toBe(1);
   });
 
-  it("silently reloads a clean editor buffer", async () => {
+  it("asks before replacing an office editor and preserves it when keeping mine", async () => {
+    const wrapper = await mountWorkbench({ path: "book.xlsx" });
+    watchHooks.onChanged!("book.xlsx");
+    await flushPromises();
+    expect(previewStub.refreshed).toBe(0);
+    expect(wrapper.find('[role="alert"]').exists()).toBe(true);
+    await wrapper.find('[data-testid="workbench-conflict-keep"]').trigger("click");
+    expect(previewStub.kept).toBe(1);
+    expect(previewStub.refreshed).toBe(0);
+  });
+
+  it("ignores an office editor's own save notification", async () => {
+    previewStub.external = false;
+    const wrapper = await mountWorkbench({ path: "book.xlsx" });
+    watchHooks.onChanged!("book.xlsx");
+    await flushPromises();
+    expect(previewStub.refreshed).toBe(0);
+    expect(wrapper.find('[role="alert"]').exists()).toBe(false);
+  });
+
+  it("asks before replacing even a clean editor buffer", async () => {
     const wrapper = await mountWorkbench({ path: "a.txt", editMode: true });
     watchHooks.onChanged!("a.txt");
     await flushPromises();
-    expect(editorStub.reloaded).toEqual(["a.txt"]);
+    expect(editorStub.reloaded).toEqual([]);
+    expect(wrapper.find('[data-testid="workbench-disk-conflict"]').exists()).toBe(true);
+  });
+
+  it("ignores the editor's own save notification without reloading", async () => {
+    editorStub.external = false;
+    const wrapper = await mountWorkbench({ path: "a.txt", editMode: true });
+    watchHooks.onChanged!("a.txt");
+    await flushPromises();
+    expect(editorStub.reloaded).toEqual([]);
     expect(wrapper.find('[data-testid="workbench-disk-conflict"]').exists()).toBe(false);
+  });
+
+  it("keeps the notice outside the content scroller and wraps its actions", async () => {
+    const wrapper = await mountWorkbench({ path: "a.txt", editMode: true });
+    watchHooks.onChanged!("a.txt");
+    await flushPromises();
+    const banner = wrapper.find('[role="alert"]');
+    expect(banner.element.parentElement).toBe(wrapper.element);
+    expect(banner.classes()).toContain("shrink-0");
+    expect(banner.classes()).toContain("flex-wrap");
+    expect(wrapper.classes()).toContain("overflow-hidden");
   });
 
   it("does NOT clobber unsaved editor changes — it shows the conflict bar", async () => {
@@ -182,6 +232,7 @@ describe("FileWorkbench disk sync", () => {
     await wrapper.find('[data-testid="workbench-conflict-keep"]').trigger("click");
     await flushPromises();
     expect(editorStub.reloaded).toEqual([]);
+    expect(editorStub.kept).toEqual(["a.txt"]);
     expect(wrapper.find('[data-testid="workbench-disk-conflict"]').exists()).toBe(false);
   });
 
@@ -202,5 +253,8 @@ describe("FileWorkbench disk sync", () => {
     await wrapper.setProps({ path: "b.txt" });
     await flushPromises();
     expect(wrapper.find('[data-testid="workbench-disk-conflict"]').exists()).toBe(false);
+    await wrapper.setProps({ path: "a.txt" });
+    await flushPromises();
+    expect(wrapper.find('[data-testid="workbench-disk-conflict"]').exists()).toBe(true);
   });
 });

@@ -95,6 +95,8 @@ const editorRef = ref<{
   closeFile: (path: string) => void;
   reloadFile: (path: string) => Promise<void>;
   isDirty: (path: string) => boolean;
+  checkDiskChange: (path: string) => Promise<boolean>;
+  keepLocalVersion: (path: string) => void;
 } | null>(null);
 
 // Order matters: restore before the save watcher exists and before the
@@ -130,6 +132,7 @@ async function closeTab(path: string) {
   if (index < 0) return;
   openPaths.value.splice(index, 1);
   editorRef.value?.closeFile(path);
+  clearNotices(path);
   if (path !== props.path) return;
 
   // Closing the visible tab has to leave the workbench somewhere valid. Prefer
@@ -206,6 +209,8 @@ const filePreviewRef = ref<{
   refresh: () => void;
   save: () => Promise<boolean>;
   isDirty: () => boolean;
+  checkDiskChange: () => Promise<boolean>;
+  keepLocalVersion: () => void;
 } | null>(null);
 const saving = ref(false);
 const saved = ref(false);
@@ -310,6 +315,7 @@ async function requestClosePath(path: string): Promise<boolean> {
   const index = openPaths.value.indexOf(path);
   if (index >= 0) openPaths.value.splice(index, 1);
   editorRef.value?.closeFile(path);
+  clearNotices(path);
   return true;
 }
 
@@ -380,6 +386,7 @@ function goToEditor() {
 }
 
 function goToPreview() {
+  clearNotices(props.path);
   setEditMode(false);
 }
 
@@ -392,7 +399,7 @@ const watchedPaths = computed(() => {
   return [...paths];
 });
 
-// Files whose on-disk copy has moved on while the buffer holds unsaved edits.
+// Files whose on-disk copy has moved on while an editor holds its own version.
 // Kept as a set rather than a boolean so switching tabs shows the right state
 // for each file.
 const diskConflicts = ref<string[]>([]);
@@ -406,20 +413,43 @@ function clearNotices(path: string) {
   removedPaths.value = removedPaths.value.filter((p) => p !== path);
 }
 
-function onDiskChanged(path: string) {
+async function onDiskChanged(path: string) {
   removedPaths.value = removedPaths.value.filter((p) => p !== path);
-  if (textEditMode.value && editorRef.value?.isDirty(path)) {
-    // Never silently overwrite work in progress. Reloading here would throw
-    // away whatever the user is typing, and that is the one failure this
-    // feature must not have.
+  const editor = editorRef.value;
+  if (textEditMode.value && editor) {
+    try {
+      if (!(await editor.checkDiskChange(path))) return;
+      if (editorRef.value !== editor || removedPaths.value.includes(path)) return;
+    } catch {
+      // A failed comparison must never trigger a destructive reload.
+      if (editorRef.value !== editor || removedPaths.value.includes(path)) return;
+    }
     if (!diskConflicts.value.includes(path)) diskConflicts.value = [...diskConflicts.value, path];
     return;
   }
-  if (textEditMode.value) {
-    void editorRef.value?.reloadFile(path);
+  if (path !== props.path) return;
+  const preview = filePreviewRef.value;
+  if (officeEditMode.value && preview) {
+    try {
+      if (!(await preview.checkDiskChange())) return;
+      if (
+        filePreviewRef.value !== preview ||
+        path !== props.path ||
+        removedPaths.value.includes(path)
+      )
+        return;
+    } catch {
+      if (
+        filePreviewRef.value !== preview ||
+        path !== props.path ||
+        removedPaths.value.includes(path)
+      )
+        return;
+    }
+    if (!diskConflicts.value.includes(path)) diskConflicts.value = [...diskConflicts.value, path];
     return;
   }
-  if (path === props.path) filePreviewRef.value?.refresh();
+  filePreviewRef.value?.refresh();
 }
 
 function onDiskRemoved(path: string) {
@@ -442,22 +472,14 @@ function reloadFromDisk() {
 }
 
 function keepMyChanges() {
+  editorRef.value?.keepLocalVersion(props.path);
+  filePreviewRef.value?.keepLocalVersion();
   clearNotices(props.path);
 }
-
-watch(
-  () => props.path,
-  (path, previous) => {
-    // A notice describes one file; carrying it across a tab switch would
-    // accuse the wrong buffer.
-    if (previous) clearNotices(previous);
-    clearNotices(path);
-  },
-);
 </script>
 
 <template>
-  <main class="relative flex flex-1 min-w-0 min-h-0 flex-col">
+  <main class="relative flex flex-1 min-w-0 min-h-0 flex-col overflow-hidden">
     <!-- Read-only preview controls. `min-h-11` (not `py-*`) is what keeps this
          bar exactly as tall as the workspace panel's breadcrumb bar, so the two
          bottom borders meet as one line across the divider. -->
@@ -673,10 +695,13 @@ watch(
          reloads over unsaved edits: the choice belongs to whoever is typing. -->
     <div
       v-if="currentConflict"
-      class="flex shrink-0 items-center gap-3 border-b border-border bg-amber-500/15 px-4 py-1.5 text-xs text-foreground"
+      class="z-10 flex shrink-0 flex-wrap items-center gap-2 border-b border-border bg-amber-500/15 px-4 py-2 text-xs text-foreground"
+      role="alert"
       data-testid="workbench-disk-conflict"
     >
-      <span class="flex-1 truncate">{{ t("files.workbench.diskChanged") }}</span>
+      <span class="min-w-0 flex-1 basis-full sm:basis-auto">{{
+        t("files.workbench.diskChanged")
+      }}</span>
       <Button
         variant="outline"
         size="sm"
@@ -710,6 +735,7 @@ watch(
       :reveal-line="props.revealLine"
       @preview="goToPreview"
       @dirty-paths="dirtyTabs = $event"
+      @saved="clearNotices"
     />
     <FilePreview
       v-else-if="path"
@@ -718,6 +744,7 @@ watch(
       :path="path"
       :web-view="htmlWebView"
       class="flex-1 min-h-0"
+      @saved="clearNotices(path)"
     />
     <div v-else class="flex flex-1 items-center justify-center text-muted-foreground text-sm">
       {{ t("files.preview.noPath") }}

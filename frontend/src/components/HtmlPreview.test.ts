@@ -36,6 +36,9 @@ vi.mock("@/composables/useFileApi", async () => {
 interface FakeFrameWindow {
   performance: { getEntriesByType: (type: string) => { name: string }[] };
   location: { reload: () => void };
+  scrollX: number;
+  scrollY: number;
+  scrollTo: ReturnType<typeof vi.fn>;
 }
 
 // happy-dom never loads a real document into the frame, so the test supplies
@@ -47,6 +50,9 @@ function stubFrameWindow(
 ): FakeFrameWindow & { reloads: number } {
   const win = {
     reloads: 0,
+    scrollX: 0,
+    scrollY: 0,
+    scrollTo: vi.fn(),
     performance: { getEntriesByType: () => resources.map((name) => ({ name })) },
     location: {
       reload() {
@@ -145,6 +151,21 @@ describe("HtmlPreview", () => {
     // A rebuild rewrites several files at once; that is still one reload.
     vi.runAllTimers();
     expect(win.reloads).toBe(1);
+  });
+
+  it("restores the framed document's scroll position after a watch reload", async () => {
+    vi.useFakeTimers();
+    const wrapper = mountPreview();
+    const frame = wrapper.find("iframe");
+    const win = stubFrameWindow(frame.element as HTMLIFrameElement, []);
+    win.scrollX = 120;
+    win.scrollY = 2400;
+    watchHooks.onChanged?.("site/index.html");
+    vi.runAllTimers();
+    win.scrollX = win.scrollY = 0;
+    await frame.trigger("load");
+    expect(win.scrollTo).toHaveBeenCalledWith(120, 2400);
+    wrapper.unmount();
   });
 
   it("reloads when the host bumps the reload token", async () => {

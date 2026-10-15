@@ -221,6 +221,8 @@ describe("FileTextEditor", () => {
       return wrapper.vm as unknown as {
         closeFile: (path: string) => void;
         isDirty: (path: string) => boolean;
+        checkDiskChange: (path: string) => Promise<boolean>;
+        keepLocalVersion: (path: string) => void;
       };
     }
 
@@ -454,7 +456,117 @@ describe("FileTextEditor", () => {
     interface EditorApi {
       reloadFile: (path: string) => Promise<void>;
       isDirty: (path: string) => boolean;
+      checkDiskChange: (path: string) => Promise<boolean>;
+      keepLocalVersion: (path: string) => void;
     }
+
+    it("detects an external write without changing the document, cursor or undo history", async () => {
+      const wrapper = await mountEditor();
+      const api = wrapper.vm as unknown as EditorApi;
+      await typeInto(wrapper, "my edits");
+      view(wrapper).dispatch({ selection: { anchor: 4 } });
+      mockReadFile.mockResolvedValueOnce(textResponse("their edits", 'W/"theirs-1"'));
+      expect(await api.checkDiskChange("/notes.txt")).toBe(true);
+      expect(visibleText(wrapper)).toBe("my edits");
+      expect(view(wrapper).state.selection.main.head).toBe(4);
+      expect(undo(view(wrapper))).toBe(true);
+      expect(visibleText(wrapper)).toBe("original");
+    });
+
+    it("also reports external writes to a clean buffer", async () => {
+      const wrapper = await mountEditor();
+      mockReadFile.mockResolvedValueOnce(textResponse("their edits"));
+      expect(await (wrapper.vm as unknown as EditorApi).checkDiskChange("/notes.txt")).toBe(true);
+      expect(visibleText(wrapper)).toBe("original");
+    });
+
+    it("ignores own save events even when the user has already typed more", async () => {
+      const wrapper = await mountEditor();
+      await typeInto(wrapper, "saved edits");
+      await button(wrapper, "Save")?.trigger("click");
+      await flushPromises();
+      await typeInto(wrapper, "new unsaved edits");
+      mockReadFile.mockResolvedValueOnce(textResponse("saved edits", 'W/"saved-1"'));
+      expect(await (wrapper.vm as unknown as EditorApi).checkDiskChange("/notes.txt")).toBe(false);
+      expect(visibleText(wrapper)).toBe("new unsaved edits");
+      expect((wrapper.vm as unknown as EditorApi).isDirty("/notes.txt")).toBe(true);
+    });
+
+    it("waits for the save response when its watch event arrives first", async () => {
+      const wrapper = await mountEditor();
+      await typeInto(wrapper, "saved edits");
+      let finish!: (value: { etag: string }) => void;
+      mockWriteFile.mockReturnValueOnce(
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+      );
+      await button(wrapper, "Save")?.trigger("click");
+      mockReadFile.mockResolvedValueOnce(textResponse("saved edits", 'W/"saved-1"'));
+      const check = (wrapper.vm as unknown as EditorApi).checkDiskChange("/notes.txt");
+      finish({ etag: 'W/"saved-1"' });
+      expect(await check).toBe(false);
+      expect(visibleText(wrapper)).toBe("saved edits");
+    });
+
+    it("retries a disk read that overlapped with a successful save", async () => {
+      const wrapper = await mountEditor();
+      let finishRead!: (value: Response) => void;
+      mockReadFile.mockReturnValueOnce(
+        new Promise((resolve) => {
+          finishRead = resolve;
+        }),
+      );
+      const check = (wrapper.vm as unknown as EditorApi).checkDiskChange("/notes.txt");
+      await flushPromises();
+      await typeInto(wrapper, "saved edits");
+      await button(wrapper, "Save")?.trigger("click");
+      await flushPromises();
+      mockReadFile.mockResolvedValueOnce(textResponse("saved edits", 'W/"saved-1"'));
+      finishRead(textResponse("original"));
+      expect(await check).toBe(false);
+      expect(visibleText(wrapper)).toBe("saved edits");
+    });
+
+    it("compares Windows line endings using the editor's document model", async () => {
+      mockReadFile.mockResolvedValueOnce(textResponse("first\r\nsecond"));
+      const wrapper = await mountEditor();
+      mockReadFile.mockResolvedValueOnce(textResponse("first\r\nsecond"));
+      expect(await (wrapper.vm as unknown as EditorApi).checkDiskChange("/notes.txt")).toBe(false);
+    });
+
+    it("keeps the local version and saves it against the disk version the user accepted", async () => {
+      const wrapper = await mountEditor();
+      const api = wrapper.vm as unknown as EditorApi;
+      mockReadFile.mockResolvedValueOnce(textResponse("their edits", 'W/"theirs-1"'));
+      await api.checkDiskChange("/notes.txt");
+      api.keepLocalVersion("/notes.txt");
+      await flushPromises();
+      expect(visibleText(wrapper)).toBe("original");
+      expect(api.isDirty("/notes.txt")).toBe(true);
+      await button(wrapper, "Save")?.trigger("click");
+      await flushPromises();
+      expect(mockWriteFile).toHaveBeenLastCalledWith(
+        "u1",
+        "/notes.txt",
+        "original",
+        'W/"theirs-1"',
+      );
+    });
+
+    it("still rejects a newer external version after keeping the local version", async () => {
+      const wrapper = await mountEditor();
+      const api = wrapper.vm as unknown as EditorApi;
+      mockReadFile.mockResolvedValueOnce(textResponse("their edits", 'W/"theirs-1"'));
+      await api.checkDiskChange("/notes.txt");
+      api.keepLocalVersion("/notes.txt");
+      await flushPromises();
+      mockWriteFile.mockRejectedValueOnce(new WriteConflictError('W/"theirs-2"'));
+      await button(wrapper, "Save")?.trigger("click");
+      await flushPromises();
+      expect(wrapper.text()).toContain("changed on disk");
+      expect(visibleText(wrapper)).toBe("original");
+    });
 
     it("reloadFile replaces the buffer contents from the server", async () => {
       const wrapper = await mountEditor();

@@ -463,7 +463,7 @@ export default {
       close: "Close file panel",
       closeDirtyConfirm: "There are unsaved changes. Close the file panel anyway?",
       diskChanged: "This file changed on disk",
-      reload: "Reload",
+      reload: "Discard mine and reload",
       keepMine: "Keep my changes",
       removed: "This file no longer exists on disk",
     },

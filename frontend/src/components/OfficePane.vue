@@ -38,6 +38,8 @@ const props = defineProps<{
   app: OfficeApp;
 }>();
 
+const emit = defineEmits<{ saved: [] }>();
+
 const { t, locale } = useI18n();
 const { isDark } = useTheme();
 const { confirm } = useConfirm();
@@ -60,19 +62,62 @@ const src = computed(() => {
     : sheetsEmbedUrl({ readOnly: readOnly.value, locale: embed });
 });
 
+let diskBytes: Uint8Array | null = null;
+let pendingWrite: Promise<void> | null = null;
+let diskConflict = false;
+let changedBytes: Uint8Array | null = null;
+
+async function readBytes(path: string): Promise<ArrayBuffer> {
+  const res = await apiFetch(readFileUrl(props.userId, path));
+  if (!res.ok) throw new Error(`read: ${res.status}`);
+  return res.arrayBuffer();
+}
+
+async function checkDiskChange(): Promise<boolean> {
+  let baseline: Uint8Array | null;
+  let bytes: Uint8Array;
+  do {
+    await pendingWrite;
+    baseline = diskBytes;
+    try {
+      bytes = new Uint8Array(await readBytes(props.path));
+    } catch (e) {
+      diskConflict = true;
+      throw e;
+    }
+    await pendingWrite;
+  } while (baseline !== diskBytes);
+  diskConflict =
+    !baseline || baseline.length !== bytes.length || bytes.some((b, i) => b !== baseline[i]);
+  changedBytes = diskConflict ? bytes : null;
+  return diskConflict;
+}
+
 /** Read and write raw bytes. Injected into the host so it stays testable. */
 const files: OfficeFileGateway = {
   async read(path) {
-    const res = await apiFetch(readFileUrl(props.userId, path));
-    if (!res.ok) throw new Error(`read: ${res.status}`);
-    return res.arrayBuffer();
+    const bytes = await readBytes(path);
+    diskBytes = new Uint8Array(bytes.slice(0));
+    return bytes;
   },
   async write(path, bytes, contentType) {
+    if (diskConflict) throw new Error(t("files.workbench.diskChanged"));
     const slash = path.lastIndexOf("/");
     const dir = slash >= 0 ? path.slice(0, slash) : "";
     const name = path.slice(slash + 1);
     const file = new File([bytes], name, { type: contentType });
-    await uploadFiles(props.userId, dir, [file], { onConflict: "overwrite" });
+    let finish!: () => void;
+    pendingWrite = new Promise<void>((resolve) => {
+      finish = resolve;
+    });
+    try {
+      await uploadFiles(props.userId, dir, [file], { onConflict: "overwrite" });
+      diskBytes = new Uint8Array(bytes.slice(0));
+      emit("saved");
+    } finally {
+      pendingWrite = null;
+      finish();
+    }
   },
 };
 
@@ -151,6 +196,9 @@ function isDirty(): boolean {
 
 function refresh(): void {
   detach();
+  diskBytes = null;
+  changedBytes = null;
+  diskConflict = false;
   error.value = "";
   frame.value += 1;
 }
@@ -162,7 +210,14 @@ watch(() => [props.userId, src.value], refresh);
 
 onBeforeUnmount(detach);
 
-defineExpose({ save, isDirty, refresh });
+function keepLocalVersion() {
+  if (changedBytes) diskBytes = changedBytes;
+  changedBytes = null;
+  diskConflict = false;
+  error.value = "";
+}
+
+defineExpose({ save, isDirty, refresh, checkDiskChange, keepLocalVersion });
 </script>
 
 <template>

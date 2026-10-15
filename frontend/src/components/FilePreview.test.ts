@@ -76,6 +76,7 @@ void detectTypeExported; // silence unused
 function mountPreview(path: string, webView?: boolean) {
   return mount(FilePreview, {
     props: { userId: "u1", path, ...(webView === undefined ? {} : { webView }) },
+    global: { directives: { mermaid: () => {} } },
   });
 }
 
@@ -105,6 +106,52 @@ beforeEach(() => {
 });
 
 describe("FilePreview", () => {
+  it.each(["notes.txt", "main.ts", "readme.md", "file.custom"])(
+    "keeps %s mounted and preserves both scroll axes while refreshing",
+    async (path) => {
+      const wrapper = mountPreview(path);
+      await vi.waitFor(() => expect(wrapper.text()).toContain("hello"));
+      const root = wrapper.element as HTMLElement;
+      const content = wrapper.find("pre").exists()
+        ? (wrapper.find("pre").element as HTMLElement)
+        : root;
+      root.scrollTop = 1800;
+      content.scrollLeft = 250;
+      const pending = deferred<Response>();
+      mockReadFile.mockReturnValueOnce(pending.promise);
+      const refresh = (wrapper.vm as unknown as { refresh: () => Promise<void> }).refresh();
+      await wrapper.vm.$nextTick();
+      expect(wrapper.text()).toContain("hello");
+      // Scrolling during the fetch should win over the position at its start.
+      root.scrollTop = 2100;
+      pending.resolve(new Response("new content"));
+      await refresh;
+      expect(wrapper.text()).toContain("new content");
+      expect(root.scrollTop).toBe(2100);
+      expect(content.scrollLeft).toBe(250);
+      wrapper.unmount();
+    },
+  );
+
+  it("does not restore an old refresh position into a newly opened file", async () => {
+    const wrapper = mountPreview("notes.txt");
+    await flushPromises();
+    const root = wrapper.element as HTMLElement;
+    root.scrollTop = 1400;
+    const pending = deferred<Response>();
+    mockReadFile.mockReturnValueOnce(pending.promise);
+    const refresh = (wrapper.vm as unknown as { refresh: () => Promise<void> }).refresh();
+    mockReadFile.mockResolvedValueOnce(new Response("next file"));
+    await wrapper.setProps({ path: "next.txt" });
+    await flushPromises();
+    root.scrollTop = 0;
+    pending.resolve(new Response("outdated"));
+    await refresh;
+    expect(wrapper.text()).toContain("next file");
+    expect(root.scrollTop).toBe(0);
+    wrapper.unmount();
+  });
+
   it("detects image types", () => {
     const wrapper = mountPreview("photo.png");
     // Should render image element
@@ -140,7 +187,7 @@ describe("FilePreview", () => {
     const wrapper = mountPreview("site/index.html", false);
     await flushPromises();
     expect(wrapper.find("[data-testid='html-preview-frame']").exists()).toBe(false);
-    expect(wrapper.find("pre code").exists()).toBe(true);
+    await vi.waitFor(() => expect(wrapper.find("pre code").exists()).toBe(true));
   });
 
   it("opens a .docx in the document editor", async () => {
@@ -173,7 +220,7 @@ describe("FilePreview", () => {
   it("detects Go module files as code", async () => {
     const wrapper = mountPreview("go.mod");
     await flushPromises();
-    expect(wrapper.find("pre code").exists()).toBe(true);
+    await vi.waitFor(() => expect(wrapper.find("pre code").exists()).toBe(true));
   });
 
   it("previews backend-detected text for unsupported extension", async () => {

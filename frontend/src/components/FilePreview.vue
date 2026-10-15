@@ -22,6 +22,8 @@ const props = withDefaults(
   { webView: true },
 );
 
+const emit = defineEmits<{ saved: [] }>();
+
 const { inspectFile, readFile, downloadFileUrl, readFileUrl } = useFileApi();
 const { t } = useI18n();
 const OfficePane = defineAsyncComponent(() =>
@@ -175,22 +177,6 @@ const highlightedCode = ref("");
 // the path too, so a superseded run can't re-read `props.path` mid-flight.
 let loadRun = 0;
 
-async function loadText(run: number, path: string) {
-  loading.value = true;
-  error.value = "";
-  try {
-    const res = await readFile(props.userId, path);
-    const text = await res.text();
-    if (run !== loadRun) return;
-    textContent.value = text;
-  } catch (e) {
-    if (run !== loadRun) return;
-    error.value = errorMessage(e);
-  } finally {
-    if (run === loadRun) loading.value = false;
-  }
-}
-
 // Cache-bust counter for binary previews — img/audio/video/iframe URLs are
 // otherwise identical across refresh()es and the browser would replay the
 // cached response.
@@ -245,17 +231,24 @@ async function loadPptx(run: number) {
   }
 }
 
-async function loadCurrent() {
+const scrollRoot = ref<HTMLElement | null>(null);
+const contentScroll = ref<HTMLElement | null>(null);
+
+async function loadCurrent(preservePosition = false) {
   const run = ++loadRun;
   const path = props.path;
   let type_ = detectType(path);
-  previewType.value = type_;
-  textContent.value = "";
-  highlightedCode.value = "";
-  if (pptxContainer.value) pptxContainer.value.replaceChildren();
+  if (!preservePosition) {
+    previewType.value = type_;
+    loading.value = false;
+    error.value = "";
+    textContent.value = "";
+    highlightedCode.value = "";
+    if (pptxContainer.value) pptxContainer.value.replaceChildren();
+  }
 
   if (type_ === "unknown" && shouldInspectTextFile(path)) {
-    loading.value = true;
+    if (!preservePosition) loading.value = true;
     error.value = "";
     try {
       const info = await inspectFile(props.userId, path);
@@ -273,30 +266,66 @@ async function loadCurrent() {
     }
   }
 
-  if (type_ === "text" || type_ === "markdown") {
-    await loadText(run, path);
-  } else if (type_ === "code") {
-    await loadText(run, path);
-    if (run !== loadRun) return;
-    const highlighted = await highlightCode(textContent.value, ext.value);
-    if (run !== loadRun) return;
-    highlightedCode.value = highlighted;
+  if (type_ === "text" || type_ === "markdown" || type_ === "code") {
+    // Keep the current document mounted during a watch refresh. Replacing it
+    // with a loading row collapses the scroll range before the read completes.
+    if (!preservePosition) loading.value = true;
+    error.value = "";
+    try {
+      const res = await readFile(props.userId, path);
+      const text = await res.text();
+      if (run !== loadRun) return;
+      const highlighted = type_ === "code" ? await highlightCode(text, ext.value) : "";
+      if (run !== loadRun) return;
+      // Capture at commit time: the reader may have scrolled during the fetch.
+      const positions = preservePosition
+        ? [scrollRoot.value, contentScroll.value]
+            .filter((el) => el !== null)
+            .map((el) => ({
+              el,
+              top: el.scrollTop,
+              left: el.scrollLeft,
+            }))
+        : [];
+      textContent.value = text;
+      highlightedCode.value = highlighted;
+      loading.value = false;
+      await nextTick();
+      if (run !== loadRun) return;
+      for (const { el, top, left } of positions) {
+        el.scrollTop = top;
+        el.scrollLeft = left;
+      }
+    } catch (e) {
+      if (run === loadRun) error.value = errorMessage(e);
+    } finally {
+      if (run === loadRun) loading.value = false;
+    }
   } else if (type_ === "pptx") {
     await loadPptx(run);
   }
 }
 
-watch([() => props.path, () => props.webView], loadCurrent, { immediate: true });
+watch([() => props.path, () => props.webView], () => void loadCurrent(), { immediate: true });
 
-function refresh() {
+async function refresh() {
   reloadKey.value++;
-  void loadCurrent();
+  await loadCurrent(true);
 }
 
 // Saving is owned by the embedded editor; expose a pass-through so the page
 // header's Save button can drive it. Returns false when the current file isn't
 // an editable office document.
-const officeRef = ref<{ save: () => Promise<boolean>; isDirty: () => boolean } | null>(null);
+const officeRef = ref<{
+  save: () => Promise<boolean>;
+  isDirty: () => boolean;
+  checkDiskChange: () => Promise<boolean>;
+  keepLocalVersion: () => void;
+} | null>(null);
+
+async function checkDiskChange(): Promise<boolean> {
+  return (await officeRef.value?.checkDiskChange()) ?? true;
+}
 async function save(): Promise<boolean> {
   return (await officeRef.value?.save()) ?? false;
 }
@@ -308,11 +337,15 @@ function isDirty(): boolean {
   return officeRef.value?.isDirty() ?? false;
 }
 
-defineExpose({ refresh, save, isDirty });
+function keepLocalVersion() {
+  officeRef.value?.keepLocalVersion();
+}
+
+defineExpose({ refresh, save, isDirty, checkDiskChange, keepLocalVersion });
 </script>
 
 <template>
-  <div class="h-full overflow-auto">
+  <div ref="scrollRoot" class="h-full overflow-auto">
     <div v-if="loading" class="py-10 px-4 md:px-5 text-center text-muted-foreground text-sm">
       {{ t("files.preview.loading") }}
     </div>
@@ -369,12 +402,14 @@ defineExpose({ refresh, save, isDirty });
     <!-- Code (highlight.js escapes; see eslint.config vue/no-v-html note) -->
     <pre
       v-else-if="previewType === 'code'"
+      ref="contentScroll"
       class="m-0 p-4 text-[13px] leading-normal overflow-auto bg-muted text-foreground"
     ><code class="font-mono" v-html="highlightedCode"></code></pre>
 
     <!-- Plain text with line numbers -->
     <div
       v-else-if="previewType === 'text'"
+      ref="contentScroll"
       class="flex m-0 text-[13px] leading-normal text-foreground overflow-auto"
     >
       <div
@@ -395,6 +430,7 @@ defineExpose({ refresh, save, isDirty });
         :user-id="userId"
         :path="path"
         :app="officeAppFor(path) ?? 'sheet'"
+        @saved="emit('saved')"
       />
     </div>
 

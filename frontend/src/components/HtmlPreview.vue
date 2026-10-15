@@ -130,7 +130,18 @@ function defaultLinksToNewTab() {
   }
 }
 
+let scrollPosition: { path: string; left: number; top: number } | null = null;
+
 function onFrameLoad() {
+  const position = scrollPosition;
+  scrollPosition = null;
+  if (position?.path === props.path) {
+    try {
+      frame.value?.contentWindow?.scrollTo(position.left, position.top);
+    } catch {
+      // A frame that navigated cross-origin no longer permits scroll access.
+    }
+  }
   defaultLinksToNewTab();
   collectLoadedAssets();
   observeFrameResources();
@@ -152,7 +163,11 @@ function reloadNow() {
   try {
     // Reload in place rather than re-assigning src: it preserves wherever the
     // user navigated to inside the preview, and leaves no history entry.
-    el.contentWindow?.location.reload();
+    const win = el.contentWindow;
+    if (win) {
+      scrollPosition = { path: props.path, left: win.scrollX, top: win.scrollY };
+      win.location.reload();
+    }
     return;
   } catch {
     // The page navigated somewhere cross-origin; sending the frame back to
@@ -178,6 +193,8 @@ useFileWatch({
 watch(
   () => props.path,
   (path) => {
+    clearReloadTimer();
+    scrollPosition = null;
     disconnectObserver();
     watchedPaths.value = [path];
   },
