@@ -82,26 +82,29 @@ describe("LoginPage", () => {
     expect(mockLogin).not.toHaveBeenCalled();
   });
 
-  it("routes an admin to Settings on success", async () => {
-    mockLogin.mockResolvedValueOnce({
-      id: "u1",
-      username: "admin",
-      name: "Admin",
-      is_admin: true,
-    });
-    const router = makeRouter();
-    await router.isReady();
-    const wrapper = mount(LoginPage, { global: { plugins: [router] } });
+  it.each(["/login", "/login?redirect=/"])(
+    "lands an admin on /chat after login at %s",
+    async (path) => {
+      mockLogin.mockResolvedValueOnce({
+        id: "u1",
+        username: "admin",
+        name: "Admin",
+        is_admin: true,
+      });
+      const router = makeRouter(path);
+      await router.isReady();
+      const wrapper = mount(LoginPage, { global: { plugins: [router] } });
 
-    const inputs = wrapper.findAll("input");
-    await inputs[0].setValue("admin");
-    await inputs[1].setValue("hunter2");
-    await wrapper.find("form").trigger("submit.prevent");
-    await flushPromises();
+      const inputs = wrapper.findAll("input");
+      await inputs[0].setValue("admin");
+      await inputs[1].setValue("hunter2");
+      await wrapper.find("form").trigger("submit.prevent");
+      await flushPromises();
 
-    expect(mockLogin).toHaveBeenCalledWith("admin", "hunter2");
-    expect(assignMock).toHaveBeenCalledWith("/settings");
-  });
+      expect(mockLogin).toHaveBeenCalledWith("admin", "hunter2");
+      expect(assignMock).toHaveBeenCalledWith("/chat");
+    },
+  );
 
   it("keeps the regular-user default landing on the chat surface", async () => {
     mockLogin.mockResolvedValueOnce({
@@ -120,7 +123,7 @@ describe("LoginPage", () => {
     await wrapper.find("form").trigger("submit.prevent");
     await flushPromises();
 
-    expect(assignMock).toHaveBeenCalledWith("/");
+    expect(assignMock).toHaveBeenCalledWith("/chat");
   });
 
   it("uses the redirect query param after login", async () => {
@@ -155,7 +158,7 @@ describe("LoginPage", () => {
     await wrapper.find("form").trigger("submit.prevent");
     await flushPromises();
 
-    expect(assignMock).toHaveBeenCalledWith("/");
+    expect(assignMock).toHaveBeenCalledWith("/chat");
   });
 
   // The ?redirect value is attacker-controlled, so a crafted login link must
@@ -178,7 +181,7 @@ describe("LoginPage", () => {
     await wrapper.find("form").trigger("submit.prevent");
     await flushPromises();
 
-    expect(assignMock).toHaveBeenCalledWith("/");
+    expect(assignMock).toHaveBeenCalledWith("/chat");
   });
 
   it("keeps a same-origin redirect with query and hash intact", async () => {

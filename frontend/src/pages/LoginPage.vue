@@ -130,11 +130,11 @@ async function onSubmit() {
   submitting.value = true;
   error.value = "";
   try {
-    const user = await login(username.value.trim(), password.value);
+    await login(username.value.trim(), password.value);
     // ?redirect is attacker-controlled; only a same-origin path survives.
     const target = safeRedirect(route.query.redirect);
     // Hard reload so the SPA re-bootstraps users/conversations with the new session.
-    window.location.assign(target === "/" && user.is_admin ? "/settings" : target);
+    window.location.assign(target === "/" ? "/chat" : target);
   } catch (e) {
     const status = (e as { status?: number }).status;
     if (status === 401) {

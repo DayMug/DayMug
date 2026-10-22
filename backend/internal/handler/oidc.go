@@ -52,7 +52,7 @@ func (h *OIDCHandler) Login(c *gin.Context) {
 
 // Callback completes the auth code exchange, runs the access policy, finds
 // or provisions the local user, and starts a session. On success the
-// browser is 302'd to the SPA root with the session cookie set; on failure
+// browser is 302'd to /chat with the session cookie set; on failure
 // it's 302'd to /login with the error message in a query parameter so the
 // LoginPage can render it.
 func (h *OIDCHandler) Callback(c *gin.Context) {
@@ -102,21 +102,18 @@ func (h *OIDCHandler) Callback(c *gin.Context) {
 		return
 	}
 
+	h.finishLogin(c, user.ID)
+}
+
+func (h *OIDCHandler) finishLogin(c *gin.Context, userID string) {
 	ops := h.authOps()
-	token, _, err := ops.OpenSession(c.Request.Context(), user.ID)
+	token, _, err := ops.OpenSession(c.Request.Context(), userID)
 	if err != nil {
 		h.redirectWithError(c, oidcErrorText(err))
 		return
 	}
 	setSessionCookie(c, h.Cfg, token, int(ops.SessionTTL().Seconds()))
-	c.Redirect(http.StatusFound, oidcLandingPath(user.IsAdmin))
-}
-
-func oidcLandingPath(isAdmin bool) string {
-	if isAdmin {
-		return "/settings"
-	}
-	return "/"
+	c.Redirect(http.StatusFound, "/chat")
 }
 
 // oidcErrorText renders a service-layer failure as the plain text that goes

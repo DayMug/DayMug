@@ -10,6 +10,9 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/DayMug/DayMug/backend/internal/config"
+	"github.com/DayMug/DayMug/backend/internal/middleware"
+	"github.com/DayMug/DayMug/backend/internal/store"
+	"github.com/DayMug/DayMug/backend/internal/store/storetest"
 )
 
 func TestOIDCLoginDeniesWhenServiceMissing(t *testing.T) {
@@ -47,21 +50,35 @@ func TestOIDCCallbackRedirectsWithErrorOnIdpError(t *testing.T) {
 	}
 }
 
-func TestOIDCLandingPathSeparatesAdminsAndRegularUsers(t *testing.T) {
-	tests := []struct {
-		name    string
-		isAdmin bool
-		want    string
-	}{
-		{name: "admin", isAdmin: true, want: "/settings"},
-		{name: "regular user", isAdmin: false, want: "/"},
-	}
+func TestOIDCLoginLandsOnChat(t *testing.T) {
+	for _, isAdmin := range []bool{true, false} {
+		name := "regular user"
+		if isAdmin {
+			name = "admin"
+		}
+		t.Run(name, func(t *testing.T) {
+			gin.SetMode(gin.TestMode)
+			ms := storetest.New()
+			ms.Users = append(ms.Users, store.User{ID: "u1", IsAdmin: isAdmin})
+			h := NewOIDCHandler(ms, &config.Config{}, nil)
+			w := httptest.NewRecorder()
+			c, _ := gin.CreateTestContext(w)
+			c.Request = httptest.NewRequest(http.MethodGet, "/api/auth/oidc/callback", http.NoBody)
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := oidcLandingPath(tt.isAdmin); got != tt.want {
-				t.Fatalf("oidcLandingPath(%v) = %q, want %q", tt.isAdmin, got, tt.want)
+			h.finishLogin(c, "u1")
+
+			if w.Code != http.StatusFound || w.Header().Get("Location") != "/chat" {
+				t.Fatalf("expected redirect to /chat, got status %d location %q", w.Code, w.Header().Get("Location"))
 			}
+			for _, cookie := range w.Result().Cookies() {
+				if cookie.Name == middleware.SessionCookieName {
+					if session, ok := ms.Sessions[cookie.Value]; !ok || session.UserID != "u1" {
+						t.Fatal("session cookie must refer to a persisted session for u1")
+					}
+					return
+				}
+			}
+			t.Fatal("missing session cookie")
 		})
 	}
 }
