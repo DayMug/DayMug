@@ -2,6 +2,17 @@ import { describe, it, expect } from "vitest";
 import { formatUsage } from "./chatFormat";
 
 describe("formatUsage", () => {
+  it("collapses to this turn's cost for the phone's brief form", () => {
+    const brief = (u: object) => formatUsage(JSON.stringify(u)).brief;
+    expect(
+      brief({ input_tokens: 4, output_tokens: 104, turn_cost_usd: 0.3347, total_cost_usd: 9 }),
+    ).toBe("$0.33");
+    expect(brief({ input_tokens: 4, output_tokens: 104, total_cost_usd: 0.1814 })).toBe("$0.18");
+    expect(brief({ input_tokens: 4, output_tokens: 104, turn_cost_usd: 0.004 })).toBe("<$0.01");
+    // No cost reported: the I/O pair is the next most useful single figure.
+    expect(brief({ input_tokens: 6, output_tokens: 1486 })).toBe("I/O: 6/1.5K");
+  });
+
   it("returns the abbreviated short line with K/M-compacted counts for the chip itself", () => {
     // The chip stays scannable even when token counts run into the
     // millions; the precise integer is always available in the hover

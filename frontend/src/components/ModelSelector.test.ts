@@ -162,7 +162,7 @@ describe("ModelSelector", () => {
 
     expect(wrapper.findAll("button")).toHaveLength(1);
     const trigger = wrapper.get('[data-testid="model-selector-trigger"]');
-    expect(trigger.get('[data-testid="model-selector-model"]').text()).toBe("claude-opus-4-8");
+    expect(trigger.get('[data-testid="model-selector-model"]').text()).toBe("Opus 4.8");
     expect(trigger.get('[data-testid="model-selector-account"]').text()).toBe("default");
     expect(trigger.get('[data-testid="model-selector-think"]').text()).toBe("High");
     expect(wrapper.find('[data-testid="model-selector-menu"]').exists()).toBe(false);
@@ -424,7 +424,7 @@ describe("ModelSelector", () => {
     // The instance that never fetched still renders from the shared registry.
     await openMenu(second);
     expect(modelValues(second)).toContain("claude-sonnet-5");
-    expect(first.get('[data-testid="model-selector-model"]').text()).toBe("claude-opus-4-8");
+    expect(first.get('[data-testid="model-selector-model"]').text()).toBe("Opus 4.8");
   });
 
   // The picker used to keep a private cache that invalidateModelRegistry

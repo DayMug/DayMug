@@ -170,6 +170,27 @@ describe("ChatInput", () => {
     lastRandom.mockRestore();
   });
 
+  it("never suggests a keyboard or mouse gesture on a touch screen", () => {
+    const coarse = vi.spyOn(window, "matchMedia").mockImplementation(
+      (query: string) =>
+        ({
+          matches: query === "(pointer: coarse)",
+          media: query,
+          addEventListener: vi.fn(),
+          removeEventListener: vi.fn(),
+        }) as unknown as MediaQueryList,
+    );
+    for (let i = 0; i < 6; i++) {
+      const random = vi.spyOn(Math, "random").mockReturnValue((i + 0.5) / 6);
+      const hint = mount(ChatInput, { props: defaultProps })
+        .find("textarea")
+        .attributes("placeholder");
+      random.mockRestore();
+      expect(hint).not.toMatch(/Ctrl|⌘|Right-click|click/);
+    }
+    coarse.mockRestore();
+  });
+
   it("shows the platform send shortcut inside a random hint", () => {
     setPlatform("MacIntel");
     const random = vi.spyOn(Math, "random").mockReturnValue(0);

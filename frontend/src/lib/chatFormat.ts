@@ -38,6 +38,10 @@ export interface FormattedUsage {
   // in that case) or genuinely omitted those fields.
   input?: number;
   output?: number;
+  // The one figure a phone shows by default: this turn's cost, falling back
+  // to the I/O pair when no cost was reported. The full `short` line is a tap
+  // away; spelled out on every turn it turned the transcript into a log.
+  brief?: string;
 }
 
 // compact shortens raw token counts to a chip-friendly K/M form so the
@@ -54,6 +58,7 @@ function compact(n: number): string {
 
 const t = i18n.global.t;
 const usd = (n: number) => `$${n.toFixed(4)}`;
+const usdBrief = (n: number) => (n > 0 && n < 0.01 ? "<$0.01" : `$${n.toFixed(2)}`);
 
 export function formatUsage(content: string): FormattedUsage {
   try {
@@ -85,6 +90,8 @@ export function formatUsage(content: string): FormattedUsage {
     }
     if (u.num_turns) parts.push(t("usageChip.turns", { n: u.num_turns }));
     const short = parts.join(" | ");
+    const briefCost = u.turn_cost_usd ?? u.total_cost_usd;
+    const brief = briefCost != null ? usdBrief(briefCost) : parts[0];
 
     // Detail tooltip: expand abbreviations and surface the cache TTL
     // split when the CLI provided it. Numbers go through toLocaleString
@@ -122,6 +129,7 @@ export function formatUsage(content: string): FormattedUsage {
     if (u.num_turns) lines.push(t("usageChip.internalTurns", { n: u.num_turns }));
     return {
       short,
+      brief,
       detail: lines.join("\n"),
       input: typeof u.input_tokens === "number" ? u.input_tokens : undefined,
       output: typeof u.output_tokens === "number" ? u.output_tokens : undefined,

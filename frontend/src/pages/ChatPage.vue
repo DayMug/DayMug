@@ -23,7 +23,6 @@ import ChatFooterControls from "@/components/chat/ChatFooterControls.vue";
 import ChatTranscript from "@/components/chat/ChatTranscript.vue";
 import ChatComposer from "@/components/chat/ChatComposer.vue";
 import ChatMobileHeader from "@/components/chat/ChatMobileHeader.vue";
-import MobileWorkspaceNav from "@/components/chat/MobileWorkspaceNav.vue";
 import WorkspacePanel from "@/components/WorkspacePanel.vue";
 import { Button } from "@/components/ui/button";
 import type { Conversation } from "@/composables/apiTypes";
@@ -353,55 +352,38 @@ function trimTrailingSlashes(path: string): string {
 </script>
 
 <template>
-  <!-- Mobile layout — Conversation screen (UI design `MConversationScreen`).
-       Top bar with back-to-Agent + title + notifications + more, then
-       Chat / Files inner tabs. -->
+  <!-- Mobile layout — the conversation screen: one floating top bar over a
+       single surface, with the transcript or the artifacts below it. -->
   <div
     v-if="isMobile"
-    class="relative flex flex-col flex-1 min-h-0 bg-card font-sans"
+    class="relative flex flex-col flex-1 min-h-0 bg-background font-sans"
     :style="swipeBack.style.value"
     @touchstart.passive="swipeBack.onTouchStart"
     @touchmove="swipeBack.onTouchMove"
     @touchend="swipeBack.onTouchEnd"
     @touchcancel="swipeBack.onTouchCancel"
   >
+    <!-- One floating bar is the only fixed chrome. The agent name, which
+         used to fill a second bar of its own, rides under the title, and the
+         artifacts screen is a toggle here instead of a bottom tab bar — every
+         pixel of that went to the transcript. -->
     <ChatMobileHeader
-      :back-label="authMe?.name || authMe?.username || currentUser?.name || t('chat.back')"
+      :account-label="authMe?.name || authMe?.username || currentUser?.name || t('chat.back')"
       :title="conversationTitle"
+      :subtitle="currentUser?.name"
       :notifications-enabled="mobileConversationNotifEnabled"
+      :artifacts-open="mobileTab === 'files'"
       @back="backMobile()"
+      @toggle-artifacts="setMobileTab(mobileTab === 'files' ? 'chat' : 'files')"
       @toggle-notifications="toggleMobileNotifications"
       @open-account="router.push({ name: 'settings' })"
     />
-
-    <!-- The reference keeps the project identity in a quiet second bar and
-         moves mode switching to persistent bottom navigation. This stops the
-         transcript from looking like a tabbed settings page. -->
-    <div
-      class="flex h-[47px] shrink-0 items-center border-b border-[#e6e6e6] bg-card px-5 dark:border-border"
-      data-testid="mobile-project-header"
-    >
-      <strong class="min-w-0 flex-1 truncate text-[16px] font-semibold tracking-[-0.02em]">
-        {{ currentUser?.name || conversationTitle }}
-      </strong>
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon"
-        class="size-9 shrink-0 text-muted-foreground"
-        :aria-label="t('chat.mobileArtifactsTab')"
-        data-testid="mobile-open-artifacts"
-        @click="setMobileTab('files')"
-      >
-        <PanelRightOpen class="size-[18px]" />
-      </Button>
-    </div>
 
     <!-- Chat tab -->
     <template v-if="mobileTab === 'chat'">
       <div
         ref="chatPanelRef"
-        class="flex-1 overflow-y-auto overflow-x-hidden touch-pan-y overscroll-y-contain bg-background px-3.5 pb-3 pt-2.5"
+        class="flex-1 overflow-y-auto overflow-x-hidden touch-pan-y overscroll-y-contain bg-background px-4 pb-3 pt-2"
         @scroll="onChatScroll"
       >
         <ChatTranscript
@@ -478,13 +460,6 @@ function trimTrailingSlashes(path: string): string {
         />
       </div>
     </template>
-
-    <MobileWorkspaceNav
-      :active="mobileTab === 'chat' ? 'chat' : 'artifacts'"
-      @sessions="backMobile"
-      @chat="setMobileTab('chat')"
-      @artifacts="setMobileTab('files')"
-    />
   </div>
 
   <!-- Desktop layout: side-by-side panels. UI design pins the workspace at

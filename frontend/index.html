@@ -4,19 +4,28 @@
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
-    <!-- No `viewport-fit=cover`. That value means "lay me out across the whole
-         display, including the system's reserved edges — I will inset my own
-         content with env(safe-area-inset-*)". This app never used those insets
-         anywhere, so it claimed the reserved band and then put real controls in
-         it: on an iPad the rail's conversation toggle and the model dropdowns
-         landed in the top ~44px, where touches are consumed by the system and
-         never dispatched to the page at all. Leaving viewport-fit at its `auto`
-         default hands the insetting back to the browser. Anything added here
-         later that needs edge-to-edge paint must bring its own
-         env(safe-area-inset-*) padding with it. -->
+    <link rel="manifest" href="/manifest.json" />
+    <!-- Home-screen install. `start_url` in the manifest is `/`, which the
+         router sends to the conversation list on a phone, so an icon added
+         while a conversation was open still launches into the list instead of
+         pinning that one conversation forever. -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="DayMug" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#0a0a0a" media="(prefers-color-scheme: dark)" />
+    <!-- `viewport-fit=cover` lays the page across the whole display, so a
+         standalone launch is not letterboxed around the home indicator. That
+         is a promise to inset content ourselves: `#app-root` pads itself by
+         env(safe-area-inset-*) on every side (App.vue). Without that padding
+         the iPad rail toggle and the model dropdowns once landed in the
+         system's top band, where touches never reach the page. Anything
+         rendered outside `#app-root` (teleported overlays) that sits against
+         an edge must bring its own inset. -->
     <meta
       name="viewport"
-      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, interactive-widget=resizes-content"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content"
     />
     <title>DayMug</title>
   </head>

@@ -34,8 +34,9 @@ const props = withDefaults(
       // Per-turn usage attached to assistant rows. The short string is
       // the visible token-cost chip below the bubble; the detail is the
       // multi-line hover tooltip (un-abbreviated names + 5m/1h cache
-      // TTL split). Absent on every other role.
-      usage?: { short: string; detail: string };
+      // TTL split). `brief` is the phone's collapsed form. Absent on every
+      // other role.
+      usage?: { short: string; detail: string; brief?: string };
       attachments?: Array<{ name: string; mime: string; path: string; url: string }>;
       sender?: { platform: string; id?: string; name?: string };
       // ISO-8601 timestamp of when the message was sent. Drives the
@@ -198,6 +199,10 @@ const messageLabel = computed(() => {
 // briefly without affecting sibling messages. 1500ms matches the typical
 // affordance window — long enough to register, short enough that the
 // button doesn't sit in the confirmed state and confuse a second copy.
+// Phones show only `usage.brief` until tapped; desktop always has the room for
+// the full line and keeps the hover breakdown.
+const usageExpanded = ref(false);
+
 const copied = ref(false);
 let copyResetTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -533,9 +538,17 @@ async function copyContent() {
         <Tooltip>
           <TooltipTrigger as-child>
             <div
-              class="usage-entry inline-block bg-[var(--paper-alt)] text-muted-foreground rounded px-2.5 py-1 text-[11px] font-mono cursor-default"
+              class="usage-entry inline-block cursor-default rounded px-2.5 py-1 font-mono text-[11px] text-muted-foreground max-md:px-0 max-md:py-0.5 max-md:font-sans max-md:text-[11.5px] max-md:text-muted-foreground/80 md:bg-[var(--paper-alt)]"
+              :class="{ 'max-md:font-mono max-md:text-[11px]': usageExpanded || !msg.usage.brief }"
+              :role="msg.usage.brief ? 'button' : undefined"
+              :aria-expanded="msg.usage.brief ? usageExpanded : undefined"
+              data-testid="usage-entry"
+              @click="usageExpanded = !usageExpanded"
             >
-              {{ msg.usage.short }}
+              <span class="md:hidden">{{
+                usageExpanded || !msg.usage.brief ? msg.usage.short : msg.usage.brief
+              }}</span>
+              <span class="max-md:hidden">{{ msg.usage.short }}</span>
             </div>
           </TooltipTrigger>
           <TooltipContent v-if="msg.usage.detail" side="top">{{ msg.usage.detail }}</TooltipContent>

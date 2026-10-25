@@ -13,7 +13,6 @@ import ConversationListContainer from "@/components/ConversationListContainer.vu
 import UserContextMenu from "@/components/UserContextMenu.vue";
 import MobileAgentsScreen from "@/components/MobileAgentsScreen.vue";
 import ChatMobileHeader from "@/components/chat/ChatMobileHeader.vue";
-import MobileWorkspaceNav from "@/components/chat/MobileWorkspaceNav.vue";
 import ConfirmDialog from "@/components/ConfirmDialog.vue";
 import { useHelpDoc } from "@/composables/useHelpDoc";
 import { useAppShell } from "@/composables/useAppShell";
@@ -133,14 +132,13 @@ const mobileAccountLabel = computed(
   () => authMe.value?.name || authMe.value?.username || currentUser.value?.name || t("chat.back"),
 );
 
-function openMobileConversation(view?: "artifacts") {
+function openMobileConversation() {
   const userId = currentUser.value?.id;
   const conversationId = currentConversationId.value;
   if (!userId || !conversationId) return;
   void router.push({
     name: "chat",
     params: { userId, conversationId },
-    query: view ? { view } : undefined,
   });
 }
 
@@ -615,9 +613,12 @@ onUnmounted(() => {
       <template v-else>
         <template v-if="isMobileConversationsRoute">
           <ChatMobileHeader
-            :back-label="mobileAccountLabel"
+            variant="list"
+            :account-label="mobileAccountLabel"
             :title="mobileConversationTitle"
+            :can-resume="Boolean(currentUser && currentConversationId)"
             :notifications-enabled="mobileCurrentConversation?.notifications_enabled ?? true"
+            @resume="openMobileConversation()"
             @toggle-notifications="toggleMobileConversationNotifications"
             @open-account="router.push({ name: 'settings' })"
           />
@@ -652,11 +653,6 @@ onUnmounted(() => {
             @open-settings="router.push({ name: 'settings' })"
             @add-agent="router.push({ name: 'settings-users-add' })"
             @open-help="helpDialogOpen = true"
-          />
-          <MobileWorkspaceNav
-            active="sessions"
-            @chat="openMobileConversation()"
-            @artifacts="openMobileConversation('artifacts')"
           />
         </template>
 
@@ -709,6 +705,17 @@ body,
   height: 100%;
   height: 100dvh;
   overflow: hidden;
+}
+
+/* index.html opts into `viewport-fit=cover`; this is the matching inset. It
+   sits on the root (which also carries the theme background) so the bands
+   behind the status bar and home indicator are painted in the app's colour
+   and no control can land inside them. In a normal browser
+   tab the browser chrome already owns those bands, so they mostly read 0
+   there; a standalone launch or a landscape notch is where they bite. */
+#app-root {
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom)
+    env(safe-area-inset-left);
 }
 
 /* Animated ellipsis used by the "thinking" indicator. Three dots fade

@@ -21,6 +21,7 @@ const props = defineProps<{
 // hook a vuex/pinia timer. setInterval is fine — single instance, cleared
 // on unmount.
 const now = ref(Math.floor(Date.now() / 1000));
+const revealed = ref(false);
 let timer: number | null = null;
 onMounted(() => {
   timer = window.setInterval(() => {
@@ -219,11 +220,19 @@ const tooltip = computed(() => {
           class="inline-flex items-center gap-1 text-[11px] font-mono tabular-nums cursor-default"
           :class="toneClass"
           :aria-label="tooltip"
+          @click="revealed = !revealed"
         >
           <!-- Unicode "clockwise gapped circle arrow" stands in for a refresh
                glyph without dragging in a Lucide icon for one character. -->
           <span aria-hidden="true">⟳</span>
-          <span>{{ label }}</span>
+          <!-- In a phone-width composer a healthy window is just the glyph;
+               the countdown comes back on a tap (hover tooltips never open on
+               touch) and on its own once the window turns warning/danger. -->
+          <span
+            data-testid="rate-limit-label"
+            :class="{ '@max-sm:hidden': tone === 'ok' && !revealed }"
+            >{{ label }}</span
+          >
         </span>
       </TooltipTrigger>
       <TooltipContent side="bottom">

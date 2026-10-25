@@ -1,4 +1,4 @@
-import { createRouter, createWebHistory } from "vue-router";
+import { createRouter, createWebHistory, START_LOCATION } from "vue-router";
 import ChatPage from "@/pages/ChatPage.vue";
 
 declare module "vue-router" {
@@ -135,8 +135,26 @@ const router = createRouter({
   ],
 });
 
+// A home-screen launch on a phone always opens on the conversation list.
+// The manifest's `start_url` already says so, but an iOS icon added before the
+// manifest existed (or by a Safari that ignores it) is pinned to whatever
+// conversation was open when it was added — and that one stale conversation
+// would then greet the user on every launch.
+router.beforeEach((to, from) => {
+  if (from !== START_LOCATION || to.name !== "chat") return true;
+  if (!isStandaloneLaunch() || !isMobileViewport()) return true;
+  return { name: "conversations" };
+});
+
 function isMobileViewport() {
   return window.matchMedia("(max-width: 767px)").matches;
+}
+
+function isStandaloneLaunch() {
+  return (
+    window.matchMedia("(display-mode: standalone)").matches ||
+    (navigator as Navigator & { standalone?: boolean }).standalone === true
+  );
 }
 
 export default router;

@@ -66,6 +66,8 @@ const submitShortcut = computed(() => `${primaryModifierLabel()}+Enter`);
 // Every entry must teach something the UI doesn't already make obvious.
 // Generic invitations ("What shall we build?") cost a rotation slot to tell
 // the user what an empty input box already tells them.
+// Tips that need a keyboard or a mouse (shortcuts, right-click, modifier+click)
+// are dropped on a touch screen, where they would teach something impossible.
 const INPUT_PLACEHOLDER_KEYS = [
   "chat.inputPlaceholders.sendShortcut",
   "chat.inputPlaceholders.quickDelete",
@@ -76,8 +78,17 @@ const INPUT_PLACEHOLDER_KEYS = [
   "chat.inputPlaceholders.fileNewTab",
   "chat.inputPlaceholders.share",
 ] as const;
-const inputPlaceholderKey =
-  INPUT_PLACEHOLDER_KEYS[Math.floor(Math.random() * INPUT_PLACEHOLDER_KEYS.length)];
+const TOUCH_PLACEHOLDER_KEYS = INPUT_PLACEHOLDER_KEYS.filter((key) =>
+  [
+    "chat.inputPlaceholders.queue",
+    "chat.inputPlaceholders.reorder",
+    "chat.inputPlaceholders.swipe",
+  ].includes(key),
+);
+const placeholderPool: readonly string[] = window.matchMedia?.("(pointer: coarse)").matches
+  ? TOUCH_PLACEHOLDER_KEYS
+  : INPUT_PLACEHOLDER_KEYS;
+const inputPlaceholderKey = placeholderPool[Math.floor(Math.random() * placeholderPool.length)];
 const inputPlaceholder = computed(() =>
   t(inputPlaceholderKey, { shortcut: submitShortcut.value, modifier: primaryModifierLabel() }),
 );
@@ -299,7 +310,7 @@ defineExpose({ focus: focusInput });
            message was squeezed into the left half with dead space above the
            send button. -->
       <div
-        class="composer-pill @container relative mx-auto flex min-h-[99px] max-w-[760px] flex-col items-stretch rounded-xl border border-[#eeeeee] bg-card shadow-none transition-[border-color,box-shadow] focus-within:border-[#b8b8b8] focus-within:shadow-[0_0_0_2px_rgba(25,25,25,0.035)] dark:border-border"
+        class="composer-pill @container relative mx-auto flex min-h-[99px] max-w-[760px] flex-col items-stretch rounded-xl border border-[#eeeeee] bg-card shadow-none transition-[border-color,box-shadow] focus-within:border-[#b8b8b8] focus-within:shadow-[0_0_0_2px_rgba(25,25,25,0.035)] max-md:rounded-[20px] max-md:border-black/[0.07] max-md:shadow-[0_2px_14px_rgba(20,20,30,0.06)] max-md:focus-within:border-black/[0.12] dark:border-border"
         data-cursor-surface="text"
         :class="{ 'bg-muted': !isConnected }"
         @drop.prevent="handleDrop"

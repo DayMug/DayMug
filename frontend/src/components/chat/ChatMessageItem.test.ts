@@ -533,6 +533,28 @@ describe("ChatMessageItem", () => {
     expect(pill.classes()).toContain("font-mono");
   });
 
+  it("shows only the brief usage figure on a phone until the chip is tapped", async () => {
+    const wrapper = mount(ChatMessageItem, {
+      props: {
+        msg: {
+          role: "assistant",
+          content: "done",
+          usage: { short: "I/O: 6/3.5K | Cost: $0.3347", detail: "", brief: "$0.33" },
+        },
+        collapsed: false,
+      },
+    });
+    const chip = wrapper.get('[data-testid="usage-entry"]');
+    // Two renditions, split by breakpoint because happy-dom has no media queries.
+    const phone = () => chip.get("span.md\\:hidden").text();
+    expect(phone()).toBe("$0.33");
+    expect(chip.get("span.max-md\\:hidden").text()).toBe("I/O: 6/3.5K | Cost: $0.3347");
+
+    await chip.trigger("click");
+    expect(phone()).toBe("I/O: 6/3.5K | Cost: $0.3347");
+    expect(chip.attributes("aria-expanded")).toBe("true");
+  });
+
   it("renders a muted sent-at hint next to the username on user bubbles when created_at is supplied", () => {
     // The hint sits in its own .msg-sent-at span so the existing
     // .msg-label text assertions stay clean (the label keeps showing

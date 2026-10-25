@@ -8,6 +8,7 @@ import type { Conversation, ThinkLevel } from "@/composables/apiTypes";
 import { saveRecentModel } from "@/lib/recentModel";
 import { useI18n } from "vue-i18n";
 import { errorMessage } from "@/lib/errorMessage";
+import { displayModelName } from "@/lib/modelName";
 
 const { t } = useI18n();
 
@@ -182,7 +183,9 @@ const menuRowClass =
 // thinking suffix only when it differs from the provider default.
 const accountLabel = computed(() => currentAccount.value);
 const showAccountInTrigger = computed(() => accountOptions.value.length > 1);
-const modelLabel = computed(() => currentModel.value || t("modelSelector.modelPlaceholder"));
+const modelLabel = computed(() =>
+  currentModel.value ? displayModelName(currentModel.value) : t("modelSelector.modelPlaceholder"),
+);
 const triggerTitle = computed(() =>
   [accountLabel.value, currentModel.value, thinkLabel(currentThinkLevel.value)]
     .filter(Boolean)

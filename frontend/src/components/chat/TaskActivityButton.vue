@@ -168,7 +168,7 @@ defineExpose({ close: () => (open.value = false) });
   <button
     type="button"
     data-testid="mobile-activity-button"
-    class="grid h-[54px] w-10 shrink-0 place-items-center"
+    class="grid size-11 shrink-0 place-items-center"
     :aria-label="t('chat.taskActivityOpen')"
     aria-haspopup="dialog"
     :aria-expanded="open"
@@ -205,7 +205,7 @@ defineExpose({ close: () => (open.value = false) });
       role="dialog"
       :aria-label="t('chat.taskActivity')"
       data-testid="mobile-activity-popover"
-      class="fixed left-2 right-2 top-12 z-50 rounded-[15px] border border-[#e5e5e6] bg-white p-2.5 text-[#202124] shadow-[0_18px_52px_rgba(19,19,22,0.14),0_2px_8px_rgba(19,19,22,0.06)] dark:border-border dark:bg-popover dark:text-popover-foreground"
+      class="fixed left-2 right-2 top-[calc(3rem+env(safe-area-inset-top))] z-50 rounded-[15px] border border-[#e5e5e6] bg-white p-2.5 text-[#202124] shadow-[0_18px_52px_rgba(19,19,22,0.14),0_2px_8px_rgba(19,19,22,0.06)] dark:border-border dark:bg-popover dark:text-popover-foreground"
     >
       <div class="flex items-start justify-between px-1.5 pb-[11px] pt-[7px]">
         <div class="flex min-w-0 flex-col gap-[3px]">

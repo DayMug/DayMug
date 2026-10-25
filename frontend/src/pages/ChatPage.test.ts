@@ -397,26 +397,23 @@ describe("ChatPage", () => {
     }
   });
 
-  it("uses persistent bottom navigation to switch between chat and artifacts", async () => {
+  it("switches between chat and artifacts from the header toggle, with no bottom bar", async () => {
     const matchMediaSpy = stubMobileViewport();
     try {
       await sharedRouter.push("/");
       const wrapper = mountChatPage();
       await wrapper.vm.$nextTick();
 
-      expect(wrapper.find("[data-testid='mobile-project-header']").exists()).toBe(true);
-      expect(wrapper.find("[data-testid='mobile-chat-tab']").classes()).toContain("bg-[#f3f2ff]");
+      expect(wrapper.find("[data-testid='mobile-project-header']").exists()).toBe(false);
+      expect(wrapper.find(".mobile-workspace-nav").exists()).toBe(false);
       expect(wrapper.findComponent({ name: "WorkspacePanel" }).exists()).toBe(false);
 
-      await wrapper.find("[data-testid='mobile-artifacts-tab']").trigger("click");
+      await wrapper.find("[data-testid='mobile-artifacts-toggle']").trigger("click");
       await flushPromises();
       expect(wrapper.findComponent({ name: "WorkspacePanel" }).exists()).toBe(true);
-      expect(wrapper.find("[data-testid='mobile-artifacts-tab']").classes()).toContain(
-        "bg-[#f3f2ff]",
-      );
       expect(sharedRouter.currentRoute.value.query.view).toBe("artifacts");
 
-      await wrapper.find("[data-testid='mobile-chat-tab']").trigger("click");
+      await wrapper.find("[data-testid='mobile-artifacts-toggle']").trigger("click");
       await flushPromises();
       expect(wrapper.find("textarea.composer-input").exists()).toBe(true);
       expect(sharedRouter.currentRoute.value.query.view).toBeUndefined();

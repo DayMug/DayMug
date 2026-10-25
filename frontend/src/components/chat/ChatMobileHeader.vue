@@ -1,20 +1,46 @@
 <script setup lang="ts">
-// Mobile global bar. It mirrors the reference workspace's stable top chrome:
-// product mark on the left, the active conversation in the centre, and
-// conversation list / task activity / account on the right. The content pane
-// gets its own project header below this component.
+// The phone's only piece of top chrome. It has no border and no fill of its
+// own: it sits on the same surface as the screen below it, so the page reads
+// as one sheet with a few floating controls rather than a stack of bars.
+//
+// Two variants share it so the bar does not jump when moving between screens:
+// - `conversation`: list button on the left, the conversation and its agent in
+//   the centre, task activity and the artifacts toggle on the right.
+// - `list`: product mark on the left, a shortcut back into the open
+//   conversation in the centre, task activity and the account on the right.
 import { ref } from "vue";
 import { useI18n } from "vue-i18n";
-import { Coffee, Menu, BellOff, RefreshCw } from "lucide-vue-next";
+import {
+  BellOff,
+  ChevronRight,
+  Coffee,
+  FolderOpen,
+  Menu,
+  MessageSquareText,
+  RefreshCw,
+} from "lucide-vue-next";
 import TaskActivityButton from "./TaskActivityButton.vue";
 
-defineProps<{
-  backLabel: string;
-  title: string;
-  notificationsEnabled: boolean;
-}>();
+const props = withDefaults(
+  defineProps<{
+    variant?: "conversation" | "list";
+    accountLabel: string;
+    title: string;
+    subtitle?: string;
+    notificationsEnabled: boolean;
+    artifactsOpen?: boolean;
+    canResume?: boolean;
+  }>(),
+  { variant: "conversation", subtitle: "", artifactsOpen: false, canResume: false },
+);
 
-const emit = defineEmits<{ back: []; "toggle-notifications": []; "open-account": [] }>();
+const emit = defineEmits<{
+  back: [];
+  resume: [];
+  "toggle-artifacts": [];
+  "toggle-notifications": [];
+  "open-account": [];
+}>();
 
 const { t } = useI18n();
 
@@ -31,42 +57,69 @@ function enableNotifications() {
   activity.value?.close();
   emit("toggle-notifications");
 }
+
+function onTitleClick() {
+  if (props.variant === "list" && props.canResume) emit("resume");
+}
+
+// Every control is a 44px target (the floor Apple and Google both set) with a
+// smaller visible chip inside, so the bar stays light without being fiddly.
+const target = "group grid size-11 shrink-0 place-items-center";
+const chip =
+  "grid size-9 place-items-center rounded-full border border-black/[0.06] bg-card text-[#3d4150] shadow-[0_1px_3px_rgba(20,20,30,0.06)] transition-colors group-active:bg-muted dark:border-white/10 dark:text-muted-foreground";
 </script>
 
 <template>
+  <!-- Side columns are equal (two 44px targets each) so the title is centred
+       on the screen, not on whatever space one side happens to leave. -->
   <header
-    class="mobile-global-bar relative z-30 grid h-[54px] shrink-0 grid-cols-[48px_minmax(0,1fr)_auto] items-center border-b border-[#e5e8ef] bg-white dark:border-border dark:bg-card"
+    class="mobile-global-bar relative z-30 grid h-[52px] shrink-0 grid-cols-[88px_minmax(0,1fr)_88px] items-center gap-1 px-1.5"
+    :data-variant="variant"
   >
     <button
+      v-if="variant === 'conversation'"
       type="button"
-      class="grid h-[54px] w-12 place-items-center"
+      data-testid="mobile-back-button"
+      :class="target"
       :aria-label="t('sidebar.showConversations')"
-      data-testid="mobile-brand-button"
       @click="emit('back')"
     >
+      <span :class="chip"><Menu class="size-[18px]" /></span>
+    </button>
+    <span v-else class="grid size-11 place-items-center" data-testid="mobile-brand-mark">
       <span
-        class="grid size-[30px] place-items-center rounded-[9px] bg-[linear-gradient(145deg,#2b2b2b,#191919_58%,#3a3a3a)] text-white shadow-[0_6px_16px_rgba(25,25,25,0.22)]"
+        class="grid size-8 place-items-center rounded-[10px] bg-[linear-gradient(145deg,#2b2b2b,#191919_58%,#3a3a3a)] text-white"
       >
         <Coffee class="size-[17px]" />
       </span>
-    </button>
-    <span
-      class="truncate px-[5px] text-center text-[12px] font-bold leading-[18px] text-[#202124] dark:text-foreground"
-    >
-      {{ title }}
     </span>
-    <div class="flex items-center pr-1">
-      <button
-        type="button"
-        data-testid="mobile-back-button"
-        class="group grid h-[54px] w-10 place-items-center text-[#626a7d] dark:text-muted-foreground"
-        :aria-label="`${t('sidebar.showConversations')}: ${backLabel}`"
-        @click="emit('back')"
+
+    <component
+      :is="variant === 'list' && canResume ? 'button' : 'div'"
+      :type="variant === 'list' && canResume ? 'button' : undefined"
+      class="flex min-w-0 flex-col items-center justify-center px-1 text-center"
+      :class="{ 'active:opacity-60': variant === 'list' && canResume }"
+      data-testid="mobile-header-title"
+      @click="onTitleClick"
+    >
+      <span
+        class="flex max-w-full items-center gap-0.5 text-[15px] font-semibold leading-5 tracking-[-0.01em] text-[#1f2023] dark:text-foreground"
       >
-        <span class="grid size-9 place-items-center rounded-lg group-active:bg-muted">
-          <Menu class="size-[19px]" />
-        </span>
-      </button>
+        <span class="truncate">{{ title }}</span>
+        <ChevronRight
+          v-if="variant === 'list' && canResume"
+          class="size-3.5 shrink-0 text-muted-foreground"
+        />
+      </span>
+      <span
+        v-if="subtitle"
+        class="max-w-full truncate text-[11.5px] leading-4 text-muted-foreground"
+        data-testid="mobile-header-subtitle"
+        >{{ subtitle }}</span
+      >
+    </component>
+
+    <div class="flex items-center justify-end">
       <TaskActivityButton ref="activity">
         <template #footer>
           <button
@@ -91,16 +144,34 @@ function enableNotifications() {
           </button>
         </template>
       </TaskActivityButton>
+      <!-- One button flips between the transcript and the artifacts; the icon
+           names where it takes you, so it never shows the screen you are on. -->
       <button
+        v-if="variant === 'conversation'"
         type="button"
-        class="grid h-[54px] w-10 place-items-center"
-        :aria-label="backLabel"
+        data-testid="mobile-artifacts-toggle"
+        :class="target"
+        :aria-label="artifactsOpen ? t('chat.mobileConversationTab') : t('chat.mobileArtifactsTab')"
+        :aria-pressed="artifactsOpen"
+        @click="emit('toggle-artifacts')"
+      >
+        <span :class="chip">
+          <MessageSquareText v-if="artifactsOpen" class="size-[17px]" />
+          <FolderOpen v-else class="size-[17px]" />
+        </span>
+      </button>
+      <button
+        v-else
+        type="button"
+        data-testid="mobile-account-button"
+        :class="target"
+        :aria-label="accountLabel"
         @click="emit('open-account')"
       >
         <span
-          class="grid size-[31px] place-items-center rounded-[10px] bg-[#25283b] text-[12px] font-bold leading-[18px] text-white"
+          class="grid size-8 place-items-center rounded-full bg-[#25283b] text-[12px] font-bold leading-[18px] text-white"
         >
-          {{ backLabel.slice(0, 1).toUpperCase() }}
+          {{ accountLabel.slice(0, 1).toUpperCase() }}
         </span>
       </button>
     </div>

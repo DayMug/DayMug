@@ -56,3 +56,44 @@ describe("responsive chat routes", () => {
     expect(router.currentRoute.value.name).toBe("settings-admin-models");
   });
 });
+
+describe("home-screen launch", () => {
+  function setStandaloneMobile(standalone: boolean) {
+    vi.spyOn(window, "matchMedia").mockImplementation(
+      (query: string) =>
+        ({
+          matches:
+            query === "(max-width: 767px)" ||
+            (standalone && query === "(display-mode: standalone)"),
+          media: query,
+          addEventListener: vi.fn(),
+          removeEventListener: vi.fn(),
+        }) as unknown as MediaQueryList,
+    );
+  }
+
+  async function freshRouter() {
+    vi.resetModules();
+    return (await import("./index")).default;
+  }
+
+  it("opens a standalone phone launch on the conversation list even from a pinned chat URL", async () => {
+    setStandaloneMobile(true);
+    const fresh = await freshRouter();
+
+    await fresh.push("/chat/user-1/conversation-1");
+    expect(fresh.currentRoute.value.name).toBe("conversations");
+
+    // Only the launch is redirected; tapping into a conversation afterwards works.
+    await fresh.push("/chat/user-1/conversation-1");
+    expect(fresh.currentRoute.value.path).toBe("/chat/user-1/conversation-1");
+  });
+
+  it("leaves a chat URL opened in a browser tab alone", async () => {
+    setStandaloneMobile(false);
+    const fresh = await freshRouter();
+
+    await fresh.push("/chat/user-1/conversation-1");
+    expect(fresh.currentRoute.value.path).toBe("/chat/user-1/conversation-1");
+  });
+});

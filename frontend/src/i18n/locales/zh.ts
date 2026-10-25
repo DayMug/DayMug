@@ -230,8 +230,6 @@ export default {
     waitingOnBackground: "{name} 在等后台任务跑完，跑完会自动继续",
     stopBackground: "停止",
     back: "返回",
-    mobileNavigation: "工作台导航",
-    mobileConversationsTab: "会话",
     mobileConversationTab: "对话",
     mobileArtifactsTab: "产出物",
     taskActivity: "任务动态",

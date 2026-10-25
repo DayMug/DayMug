@@ -265,8 +265,6 @@ export default {
       "{name} is waiting for background work to finish and will continue on its own",
     stopBackground: "Stop",
     back: "Back",
-    mobileNavigation: "Workspace navigation",
-    mobileConversationsTab: "Sessions",
     mobileConversationTab: "Chat",
     mobileArtifactsTab: "Artifacts",
     taskActivity: "Task activity",

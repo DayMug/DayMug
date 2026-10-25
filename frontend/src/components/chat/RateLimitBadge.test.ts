@@ -35,6 +35,23 @@ describe("RateLimitBadge", () => {
     vi.useRealTimers();
   });
 
+  it("folds a healthy countdown away in a phone-width composer until tapped", async () => {
+    const wrapper = mount(RateLimitBadge, { props: { rateLimits: { five_hour: fiveHour() } } });
+    const label = () => wrapper.get('[data-testid="rate-limit-label"]');
+    expect(label().classes()).toContain("@max-sm:hidden");
+    await wrapper.get('[data-testid="rate-limit-badge"]').trigger("click");
+    expect(label().classes()).not.toContain("@max-sm:hidden");
+  });
+
+  it("keeps a warning countdown visible at any width", () => {
+    const wrapper = mount(RateLimitBadge, {
+      props: { rateLimits: { five_hour: fiveHour({ status: "allowed_warning" }) } },
+    });
+    expect(wrapper.get('[data-testid="rate-limit-label"]').classes()).not.toContain(
+      "@max-sm:hidden",
+    );
+  });
+
   it("renders nothing when no rate-limit info is available", () => {
     const wrapper = mount(RateLimitBadge, { props: { rateLimits: {} } });
     expect(wrapper.find('[data-testid="rate-limit-badge"]').exists()).toBe(false);

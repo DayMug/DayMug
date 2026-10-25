@@ -293,14 +293,11 @@ describe("App.vue", () => {
 
     expect(router.currentRoute.value.name).toBe("conversations");
     expect(wrapper.find(".mobile-global-bar").exists()).toBe(true);
-    expect(wrapper.find(".mobile-workspace-nav").exists()).toBe(true);
-    expect(wrapper.get('[data-testid="mobile-conversations-tab"]').classes()).toContain(
-      "bg-[#f3f2ff]",
-    );
+    expect(wrapper.find(".mobile-workspace-nav").exists()).toBe(false);
     wrapper.unmount();
   });
 
-  it("opens the current conversation's artifact view from the mobile workspace nav", async () => {
+  it("resumes the current conversation from the list header's title", async () => {
     mockIsMobile.value = true;
     mockCurrentUser.value = { id: "user-1", name: "Alice" };
     mockCurrentConversationId.value = "conv-1";
@@ -313,7 +310,7 @@ describe("App.vue", () => {
       await new Promise((r) => setTimeout(r, 0));
     }
 
-    await wrapper.get('[data-testid="mobile-artifacts-tab"]').trigger("click");
+    await wrapper.get('[data-testid="mobile-header-title"]').trigger("click");
     for (let i = 0; i < 3; i++) {
       await new Promise((r) => setTimeout(r, 0));
     }
@@ -323,7 +320,7 @@ describe("App.vue", () => {
       userId: "user-1",
       conversationId: "conv-1",
     });
-    expect(router.currentRoute.value.query.view).toBe("artifacts");
+    expect(router.currentRoute.value.query.view).toBeUndefined();
     wrapper.unmount();
   });
 

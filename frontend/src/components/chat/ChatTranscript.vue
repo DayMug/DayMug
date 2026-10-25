@@ -144,9 +144,9 @@ function toggleToolGroup(group: ToolGroupItem) {
       <Button
         type="button"
         data-testid="clear-context-btn"
-        variant="outline"
+        variant="ghost"
         size="sm"
-        class="h-7 rounded-full px-3 text-[12px] font-normal text-muted-foreground"
+        class="h-7 rounded-full px-3 text-[12px] font-normal text-muted-foreground/80 hover:text-foreground"
         :disabled="clearingContext || !isConnected"
         :title="
           isConnected
