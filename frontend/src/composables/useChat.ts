@@ -72,6 +72,7 @@ import {
   queueAhead,
   queuePosition,
   queueRunning,
+  scheduledPrompts,
   startedPromptIds,
   type PendingPrompt,
 } from "@/stores/chatQueueStore";
@@ -168,6 +169,9 @@ function resetConversationSwitchState(id: string) {
   recallText.value = "";
   recallAttachments.value = [];
   pendingPrompts.value = [];
+  // The server offers the new conversation's list on init (only when there is
+  // one), so start from empty rather than showing the previous one's.
+  scheduledPrompts.value = [];
   startedPromptIds.clear();
   cursors.lastSyncedMessageId = "";
   cursors.oldestLoadedMessageId = "";
@@ -338,6 +342,35 @@ function sendMessage(text: string, attachments?: MessageAttachment[], insert = f
   }
 }
 
+// scheduleMessage asks the server to hold the prompt until sendAt. Nothing is
+// staged locally: the scheduled_prompts broadcast that follows is what lists
+// it, so every tab — this one included — renders the same server-side list.
+// When it fires it is sent like a plain send, queueing behind any running task.
+function scheduleMessage(text: string, attachments: MessageAttachment[] | undefined, sendAt: Date) {
+  const sent = ws.send({
+    type: "input",
+    content: text,
+    send_at: sendAt.toISOString(),
+    ...conversationMessageScope(),
+    ...(attachments?.length ? { attachments } : {}),
+  });
+  if (!sent) {
+    recallAttachments.value = attachments ?? [];
+    recallText.value = text;
+    chatMessages.value.push({ role: "error", content: i18n.global.t("chat.sendFailedOffline") });
+    scrollChat();
+  }
+}
+
+// cancelScheduledPrompt drops a scheduled prompt. The text comes back into
+// the composer only once the server confirms the removal
+// (scheduled_prompt_cancelled), because a prompt that fired in the meantime
+// is already part of the conversation and must not be recalled as well.
+function cancelScheduledPrompt(id: string) {
+  if (!id) return;
+  ws.send({ type: "cancel_scheduled", message_id: id, ...conversationMessageScope() });
+}
+
 function cancelMessage() {
   // Broad cancel: abort the currently-running claude run AND drop every
   // still-pending prompt for this conversation. The server replies with
@@ -463,6 +496,7 @@ export function useChat() {
     queuePosition,
     queueRunning,
     pendingPrompts,
+    scheduledPrompts,
     pendingUserQuestion,
     isAnsweringUserQuestion,
     contextUsage,
@@ -490,8 +524,10 @@ export function useChat() {
     reconnectAttempts: ws.reconnectAttempts,
     switchToConversation,
     sendMessage,
+    scheduleMessage,
     cancelMessage,
     cancelPendingPrompt,
+    cancelScheduledPrompt,
     answerUserQuestion,
     clearContext,
     disconnectWs,
@@ -503,3 +539,4 @@ export function useChat() {
 }
 
 export type { ChatMessage, PendingPrompt };
+export type { ScheduledPrompt } from "@/stores/chatQueueStore";

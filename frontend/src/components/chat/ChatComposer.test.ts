@@ -18,7 +18,7 @@ const ChatInputStub = {
     "recallAttachments",
     "provider",
   ],
-  emits: ["send", "cancel", "recall-consumed"],
+  emits: ["send", "schedule", "cancel", "recall-consumed"],
   methods: { focus },
   template: `<div data-testid="chat-input-stub" />`,
 };
@@ -115,5 +115,18 @@ describe("ChatComposer", () => {
     focus.mockClear();
     wrapper.vm.focus();
     expect(focus).toHaveBeenCalledOnce();
+  });
+
+  it("lists scheduled prompts and forwards scheduling and its cancel", async () => {
+    const wrapper = mountComposer({
+      scheduledPrompts: [{ id: "s1", content: "later", sendAt: "2030-05-01T10:00:00Z" }],
+    });
+    expect(wrapper.find("[data-testid='scheduled-prompt-content']").text()).toBe("later");
+    await wrapper.find("[data-testid='scheduled-prompt-cancel']").trigger("click");
+    expect(wrapper.emitted("cancel-scheduled")?.[0]).toEqual(["s1"]);
+
+    const sendAt = new Date("2030-05-01T11:00:00Z");
+    wrapper.findComponent({ name: "ChatInput" }).vm.$emit("schedule", "hi", undefined, sendAt);
+    expect(wrapper.emitted("schedule")?.[0]).toEqual(["hi", undefined, sendAt]);
   });
 });

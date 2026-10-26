@@ -56,6 +56,21 @@ export function isStagedPromptStatus(status?: string): boolean {
 // Shared by every useChat() caller.
 export const pendingPrompts = ref<PendingPrompt[]>([]);
 
+// ScheduledPrompt is a message the user chose to send later. The server holds
+// it outside the transcript and the dispatcher queue until sendAt, then sends
+// it like a plain send — from then on it arrives as an ordinary user_message.
+export interface ScheduledPrompt {
+  id: string;
+  content: string;
+  attachments?: MessageAttachment[];
+  // ISO 8601 instant.
+  sendAt: string;
+}
+
+// The current conversation's scheduled prompts, soonest first. Replaced
+// wholesale by every scheduled_prompts frame.
+export const scheduledPrompts = ref<ScheduledPrompt[]>([]);
+
 let pendingPromptSeq = 0;
 // nextPendingPromptSeq increments and returns the client-key sequence.
 // Wrapped in a function (rather than an exported `let`) because ESM
@@ -93,6 +108,7 @@ export function clearQueueMetrics() {
 
 export function resetChatQueueStore() {
   pendingPrompts.value = [];
+  scheduledPrompts.value = [];
   startedPromptIds.clear();
   pendingPromptSeq = 0;
   clearQueueMetrics();

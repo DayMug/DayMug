@@ -28,6 +28,8 @@ type PromptIntake struct {
 	Drainer     *Drainer
 	Pause       *PauseGate
 	Persist     *MessagePersister
+	// Scheduled is woken when Schedule adds a prompt. nil-safe.
+	Scheduled *ScheduledPromptScheduler
 }
 
 // PromptSubmission is one prompt as the transport received it.

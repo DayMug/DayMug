@@ -135,6 +135,10 @@ type ServerMessage struct {
 	// remove the matching optimistic rows from history and the contents
 	// to repopulate the editor for re-editing.
 	CancelledPrompts []store.Message `json:"cancelled_prompts,omitempty"`
+	// ScheduledPrompts is the conversation's complete "send later" list on
+	// scheduled_prompts frames (absent = none left), and the one prompt a
+	// cancel removed on scheduled_prompt_cancelled.
+	ScheduledPrompts []store.ScheduledPrompt `json:"scheduled_prompts,omitempty"`
 	// Conversation carries the persisted conversation row on user-hub
 	// lifecycle events: conversation_added, conversation_updated. The
 	// frontend merges this snapshot into its session list so peer tabs

@@ -42,6 +42,7 @@ Storage uses pure-Go `modernc/sqlite` (no CGO). The database file is hard-coded 
 | `app_settings` | Runtime-editable global key/values (provider accounts, models, prices, help docs, etc.), so YAML doesn't need editing |
 | `marketplace_apps` | Site-wide shared app-marketplace links; any logged-in user can add or delete them |
 | `cron_jobs` | User-owned scheduled Agent tasks; each trigger creates a regular conversation and enqueues `prompt` as a user message |
+| `scheduled_prompts` | Composer messages held for a later send time ("Schedule send"); each becomes an ordinary pending prompt in its conversation when due |
 | `schema_migrations` | Applied startup migrations: version, name, whether destructive, and when applied |
 
 ### `marketplace_apps`
@@ -186,6 +187,18 @@ PRIMARY KEY (user_id, provider_type, provider_name)
 is_default INTEGER   -- exactly one row per (user,type) is 1
 ```
 `provider_name` has no foreign key; the provider registry is stored as JSON in `app_settings`, and at runtime the resolver validates (name, type) against the live config. After an account is deleted, leftover bindings resolve to a clean "no <type> provider configured" error. This table is what lets one user hold multiple accounts for the same CLI type.
+
+### `scheduled_prompts`
+
+```sql
+id, conversation_id (FK ON DELETE CASCADE), user_id,
+content, metadata,          -- metadata: attachment metadata resolved when scheduled
+send_at,                    -- UTC, second precision
+created_at
+```
+Indexes on `send_at` and `conversation_id`.
+
+A scheduled prompt is deliberately not a `messages` row: until it fires it must stay out of history, search and the dispatcher queue. `service.ScheduledPromptScheduler` sleeps until the earliest `send_at` (at most a minute at a time; a new schedule wakes it), then claims each due row by deleting it and submits it through `PromptIntake.Submit`, exactly like a plain send — so it queues behind a running turn. A cancel goes through the same delete, so a row is either sent or recalled, never both. Rows that came due while the server was down fire right after startup recovery; rows of soft-deleted conversations never fire.
 
 ### `cron_jobs`
 

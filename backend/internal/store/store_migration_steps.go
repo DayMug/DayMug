@@ -195,3 +195,32 @@ func dropPublishedSites(ctx context.Context, tx *sql.Tx) error {
 	}
 	return nil
 }
+
+// createScheduledPrompts adds the table behind the composer's "send later"
+// action. A scheduled prompt is not a messages row: until it fires it must stay
+// out of history, the dispatcher queue, search and every other reader of
+// messages, so it lives apart and becomes an ordinary pending prompt only when
+// it is due.
+func createScheduledPrompts(ctx context.Context, tx *sql.Tx) error {
+	for _, stmt := range []string{
+		`CREATE TABLE scheduled_prompts (
+    id              TEXT PRIMARY KEY,
+    conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
+    -- The sender's user-hub room, refreshed when the prompt fires.
+    user_id         TEXT NOT NULL DEFAULT '',
+    content         TEXT NOT NULL,
+    -- Resolved attachment metadata, copied onto the message when it fires.
+    metadata        TEXT NOT NULL DEFAULT '',
+    -- UTC, second precision; compared as text against the same layout.
+    send_at         DATETIME NOT NULL,
+    created_at      DATETIME NOT NULL DEFAULT (datetime('now'))
+)`,
+		"CREATE INDEX idx_scheduled_prompts_send_at ON scheduled_prompts(send_at)",
+		"CREATE INDEX idx_scheduled_prompts_conversation ON scheduled_prompts(conversation_id)",
+	} {
+		if _, err := tx.ExecContext(ctx, stmt); err != nil {
+			return fmt.Errorf("create scheduled_prompts: %w", err)
+		}
+	}
+	return nil
+}

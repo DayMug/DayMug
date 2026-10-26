@@ -177,6 +177,11 @@ func (h *TerminalHandler) dispatchClientFrame(
 			return
 		}
 		h.handleCancelMsg(ctx, msg, state, writeJSON, broadcastExceptSelf)
+	case "cancel_scheduled":
+		if !matchesSubscription(msg, state, writeJSON) {
+			return
+		}
+		h.handleCancelScheduledMsg(ctx, msg, state, writeJSON)
 	case "question_response":
 		if !matchesSubscription(msg, state, writeJSON) {
 			return
@@ -278,6 +283,10 @@ func (h *TerminalHandler) handleInputMsg(
 	writeJSON func(serverMessage),
 	broadcastExceptSelf func(string, serverMessage),
 ) {
+	if msg.SendAt != nil {
+		h.handleScheduleMsg(ctx, msg, state, writeJSON)
+		return
+	}
 	sub := service.PromptSubmission{
 		ConversationID: state.conversationID,
 		UserID:         state.userID,
@@ -318,6 +327,87 @@ func (h *TerminalHandler) handleInputMsg(
 		}
 		writeJSON(serverMessage{Type: "error", Message: message})
 	}
+}
+
+// handleScheduleMsg stores an input frame that carries send_at as a scheduled
+// prompt. Every tab learns about it from the scheduled_prompts broadcast; the
+// sender also gets scheduled_ack so it can clear its composer.
+func (h *TerminalHandler) handleScheduleMsg(
+	ctx context.Context,
+	msg clientMessage,
+	state *connState,
+	writeJSON func(serverMessage),
+) {
+	sub := service.PromptSubmission{
+		ConversationID: state.conversationID,
+		UserID:         state.userID,
+		Content:        msg.Content,
+	}
+	if len(msg.Attachments) > 0 {
+		sub.AttachmentMetadata = func(agentID, homeOwnerID string) (json.RawMessage, error) {
+			return buildWebUploadMetadata(agentID, homeOwnerID, msg.Attachments)
+		}
+	}
+	saveCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	saved, err := h.PromptIntake().Schedule(saveCtx, sub, *msg.SendAt, time.Now())
+	cancel()
+	if err != nil {
+		var svcErr *service.ServiceError
+		message := "failed to schedule prompt"
+		if errors.As(err, &svcErr) {
+			message = svcErr.Message()
+		}
+		writeJSON(serverMessage{Type: "error", Message: message})
+		return
+	}
+	writeJSON(serverMessage{
+		Type:             "scheduled_ack",
+		ConversationID:   state.conversationID,
+		MessageID:        saved.ID,
+		ScheduledPrompts: []store.ScheduledPrompt{saved},
+	})
+}
+
+// handleCancelScheduledMsg drops one scheduled prompt. The sender gets the
+// removed row back so it can refill its composer; a prompt that already fired
+// (or was cancelled from another tab) yields no row, so nothing is recalled
+// twice.
+func (h *TerminalHandler) handleCancelScheduledMsg(
+	ctx context.Context,
+	msg clientMessage,
+	state *connState,
+	writeJSON func(serverMessage),
+) {
+	cancelCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	dropped, found, err := h.PromptIntake().CancelScheduled(cancelCtx, state.conversationID, msg.MessageID)
+	cancel()
+	if err != nil {
+		log.Printf("[terminal] cancel scheduled id=%s conv=%s: %v", msg.MessageID, state.conversationID, err)
+	}
+	ack := serverMessage{Type: "scheduled_prompt_cancelled", ConversationID: state.conversationID}
+	if found {
+		ack.ScheduledPrompts = []store.ScheduledPrompt{dropped}
+	}
+	writeJSON(ack)
+}
+
+// offerScheduledPrompts tells a tab joining the conversation what is waiting
+// to be sent later. Nothing is sent when the list is empty: the client starts
+// every conversation with an empty list.
+func (h *TerminalHandler) offerScheduledPrompts(ctx context.Context, state *connState, writeJSON func(serverMessage)) {
+	if h.Store == nil || state.conversationID == "" {
+		return
+	}
+	frame, err := service.ScheduledPromptsFrame(ctx, h.Store, state.conversationID)
+	if err != nil {
+		log.Printf("[terminal] list scheduled conv=%s: %v", state.conversationID, err)
+		return
+	}
+	if len(frame.ScheduledPrompts) == 0 {
+		return
+	}
+	frame.SubscriptionID = state.subscriptionID
+	writeJSON(frame)
 }
 
 // handleCancelMsg implements the two cancel shapes:
@@ -424,6 +514,7 @@ func (h *TerminalHandler) handleInitMsg(
 	h.sendHistoryBackfill(ctx, state.conversationID, msg.LastMessageID, writeJSON)
 	h.joinConversationRoom(state, clientID, sendCh, writeJSON)
 	h.offerSuspendedQuestion(ctx, state, writeJSON)
+	h.offerScheduledPrompts(ctx, state, writeJSON)
 	h.bindUserSession(ctx, msg, state, authedUID, clientID, sendCh)
 	h.applyConversationSettings(ctx, state, writeJSON)
 }

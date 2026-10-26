@@ -76,6 +76,7 @@ Each agent has a full configuration profile that controls Agent SDK / app-server
 | Context usage | Shows token usage percentage bar (used vs. context window) |
 | Usage & cost | Input/output tokens, cache stats, turns; the usage chip shows each turn's billed cost next to the conversation total |
 | Prompt queue | Prompts sent while a turn runs are queued per conversation and can be recalled/edited before they start |
+| Send modes | The send menu offers send/insert now, send after the current task, or schedule send (after a delay or at a set time); scheduled messages are held server-side, survive restarts, and can be cancelled back into the editor |
 | Attachments | Upload files/images into the prompt (`POST /api/uploads`) |
 | Slash text | Passed to the agent verbatim — no web-side commands or autocomplete; see `docs/guides/slash-commands.md` |
 | Task guardrails | Per-turn soft thresholds for model calls, tool calls and cost (`guardrails` in config); an expensive turn finishes uninterrupted and the next user message gets one reminder |

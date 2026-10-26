@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { mount, flushPromises } from "@vue/test-utils";
 import ChatInput from "./ChatInput.vue";
 import { DRAFTS_STORAGE_KEY } from "@/lib/chatDrafts";
@@ -278,7 +278,7 @@ describe("ChatInput", () => {
   });
 
   // A CLI transport runs one process per turn: a message sent while it works
-  // can only wait, so the disc queues and the insert/queue chooser disappears.
+  // can only wait, so the disc queues and the menu offers no "now".
   it("only queues on a transport that cannot steer", async () => {
     fetchModelsMock.mockResolvedValue(registryWithSteering(false));
     const wrapper = mount(ChatInput, {
@@ -286,13 +286,122 @@ describe("ChatInput", () => {
     });
     await flushPromises();
 
-    expect(wrapper.find("[data-testid='send-options-btn']").exists()).toBe(false);
     const send = wrapper.find("[data-testid='send-btn']");
     expect(send.attributes("aria-label")).toBe("Send after the current task (Ctrl+Enter)");
 
     await wrapper.find("textarea").setValue("after this");
+    await wrapper.find("[data-testid='send-options-btn']").trigger("click");
+    expect(wrapper.find("[data-testid='send-now-btn']").exists()).toBe(false);
+    expect(wrapper.find("[data-testid='queue-after-current-btn']").exists()).toBe(true);
+    expect(wrapper.find("[data-testid='schedule-send-btn']").exists()).toBe(true);
+
     await send.trigger("click");
     expect(wrapper.emitted("send")?.[0]).toEqual(["after this"]);
+  });
+
+  it("offers all three send modes while idle, with after-completion disabled", async () => {
+    const wrapper = mount(ChatInput, { props: defaultProps });
+    await wrapper.find("textarea").setValue("hello");
+    await wrapper.find("[data-testid='send-options-btn']").trigger("click");
+
+    const now = wrapper.find("[data-testid='send-now-btn']");
+    expect(now.text()).toContain("Send now");
+    const queued = wrapper.find("[data-testid='queue-after-current-btn']");
+    expect((queued.element as HTMLButtonElement).disabled).toBe(true);
+    expect(queued.text()).toContain("Only while a task is running");
+    expect(wrapper.find("[data-testid='schedule-send-btn']").text()).toContain("Schedule send");
+
+    await now.trigger("click");
+    expect(wrapper.emitted("send")?.[0]).toEqual(["hello"]);
+  });
+
+  it("inserts from the menu's send-now item while a task runs", async () => {
+    const wrapper = mount(ChatInput, { props: { ...defaultProps, isThinking: true } });
+    await wrapper.find("textarea").setValue("steer");
+    await wrapper.find("[data-testid='send-options-btn']").trigger("click");
+    const now = wrapper.find("[data-testid='send-now-btn']");
+    expect(now.text()).toContain("Insert now");
+    await now.trigger("click");
+    expect(wrapper.emitted("send")?.[0]).toEqual(["steer", undefined, true]);
+  });
+
+  describe("schedule send", () => {
+    const fixedNow = new Date(2030, 4, 1, 14, 20, 0);
+
+    beforeEach(() => {
+      vi.useFakeTimers({ toFake: ["Date"] });
+      vi.setSystemTime(fixedNow);
+    });
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    async function openSchedule(text = "later please") {
+      const wrapper = mount(ChatInput, { props: defaultProps });
+      await wrapper.find("textarea").setValue(text);
+      await wrapper.find("[data-testid='send-options-btn']").trigger("click");
+      await wrapper.find("[data-testid='schedule-send-btn']").trigger("click");
+      return wrapper;
+    }
+
+    it("schedules after a relative delay picked from a preset", async () => {
+      const wrapper = await openSchedule();
+      expect(wrapper.find("[data-testid='schedule-panel']").exists()).toBe(true);
+      expect(wrapper.emitted("send")).toBeFalsy();
+
+      const presets = wrapper.findAll("[data-testid='schedule-preset']");
+      await presets.find((p) => p.text() === "2 h")!.trigger("click");
+      expect(wrapper.find("[data-testid='schedule-preview']").text()).toContain("in 2 hr.");
+      await wrapper.find("[data-testid='schedule-confirm-btn']").trigger("click");
+
+      const [text, attachments, sendAt] = wrapper.emitted("schedule")![0] as [
+        string,
+        unknown,
+        Date,
+      ];
+      expect(text).toBe("later please");
+      expect(attachments).toBeUndefined();
+      expect(sendAt.getTime()).toBe(fixedNow.getTime() + 2 * 3_600_000);
+      expect((wrapper.find("textarea").element as HTMLTextAreaElement).value).toBe("");
+      expect(wrapper.find("[data-testid='send-options-menu']").exists()).toBe(false);
+    });
+
+    it("takes a custom amount and unit", async () => {
+      const wrapper = await openSchedule();
+      await wrapper.find("[data-testid='schedule-amount']").setValue("3");
+      await wrapper.find("[data-testid='schedule-unit']").setValue("days");
+      await wrapper.find("[data-testid='schedule-confirm-btn']").trigger("click");
+      const sendAt = wrapper.emitted("schedule")![0][2] as Date;
+      expect(sendAt.getTime()).toBe(fixedNow.getTime() + 3 * 86_400_000);
+    });
+
+    it("schedules at an absolute time and refuses one in the past", async () => {
+      const wrapper = await openSchedule();
+      await wrapper.find("[data-testid='schedule-kind-absolute']").trigger("click");
+      const input = wrapper.find("[data-testid='schedule-datetime']");
+      // Defaults to the next whole hour at least half an hour out.
+      expect((input.element as HTMLInputElement).value).toBe("2030-05-01T15:00");
+
+      await input.setValue("2030-05-01T09:00");
+      const confirm = wrapper.find("[data-testid='schedule-confirm-btn']");
+      expect((confirm.element as HTMLButtonElement).disabled).toBe(true);
+      expect(wrapper.find("[data-testid='schedule-preview']").text()).toContain(
+        "Pick a time in the future",
+      );
+
+      await input.setValue("2030-05-02T09:30");
+      await confirm.trigger("click");
+      const sendAt = wrapper.emitted("schedule")![0][2] as Date;
+      expect(sendAt.getTime()).toBe(new Date(2030, 4, 2, 9, 30).getTime());
+    });
+
+    it("goes back to the mode list without sending", async () => {
+      const wrapper = await openSchedule();
+      await wrapper.find("[data-testid='schedule-back-btn']").trigger("click");
+      expect(wrapper.find("[data-testid='schedule-send-btn']").exists()).toBe(true);
+      expect(wrapper.emitted("schedule")).toBeFalsy();
+      expect((wrapper.find("textarea").element as HTMLTextAreaElement).value).toBe("later please");
+    });
   });
 
   it("inserts by default on a transport that can steer", async () => {

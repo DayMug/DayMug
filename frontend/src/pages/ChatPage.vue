@@ -40,6 +40,7 @@ const {
   isTurnStatusKnown,
   queuePosition,
   pendingPrompts,
+  scheduledPrompts,
   pendingUserQuestion,
   isAnsweringUserQuestion,
   isConnected,
@@ -54,6 +55,8 @@ const {
   sendMessage,
   cancelMessage,
   cancelPendingPrompt,
+  cancelScheduledPrompt,
+  scheduleMessage,
   answerUserQuestion,
   clearContext,
   setChatScrollFn,
@@ -320,6 +323,15 @@ function handleSendMessage(text: string, attachments?: MessageAttachment[], inse
   workspacePanelRef.value?.refresh();
 }
 
+function handleScheduleMessage(
+  text: string,
+  attachments: MessageAttachment[] | undefined,
+  sendAt: Date,
+) {
+  void requestBrowserNotificationPermission();
+  scheduleMessage(text, attachments, sendAt);
+}
+
 // Relative path from the conversation work_dir for workspace navigation. Always
 // lands on the conversation's work_dir on mount and on every conversation
 // switch. The user can navigate freely during the session; we just don't try to
@@ -403,6 +415,7 @@ function trimTrailingSlashes(path: string): string {
       <ChatComposer
         :ref="setComposerRef"
         :prompts="pendingPrompts"
+        :scheduled-prompts="scheduledPrompts"
         :has-active-task="hasActiveTask"
         :is-thinking="isThinking"
         :turn-status-known="isTurnStatusKnown"
@@ -417,6 +430,8 @@ function trimTrailingSlashes(path: string): string {
         @send="handleSendMessage"
         @cancel="cancelMessage"
         @cancel-prompt="cancelPendingPrompt"
+        @cancel-scheduled="cancelScheduledPrompt"
+        @schedule="handleScheduleMessage"
         @answer="answerUserQuestion"
         @recall-consumed="consumeRecall"
       >
@@ -528,6 +543,7 @@ function trimTrailingSlashes(path: string): string {
       <ChatComposer
         :ref="setComposerRef"
         :prompts="pendingPrompts"
+        :scheduled-prompts="scheduledPrompts"
         :has-active-task="hasActiveTask"
         :is-thinking="isThinking"
         :turn-status-known="isTurnStatusKnown"
@@ -542,6 +558,8 @@ function trimTrailingSlashes(path: string): string {
         @send="handleSendMessage"
         @cancel="cancelMessage"
         @cancel-prompt="cancelPendingPrompt"
+        @cancel-scheduled="cancelScheduledPrompt"
+        @schedule="handleScheduleMessage"
         @answer="answerUserQuestion"
         @recall-consumed="consumeRecall"
       >

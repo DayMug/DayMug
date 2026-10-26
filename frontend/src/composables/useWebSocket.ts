@@ -234,6 +234,8 @@ export function useWebSocket() {
     request_id?: string;
     answers?: Record<string, string[]>;
     steer?: boolean;
+    // Set on `input` to hold the prompt until this ISO 8601 instant.
+    send_at?: string;
   }): boolean {
     // False means the frame was not handed to the socket, so callers that
     // staged optimistic state for it can undo it instead of waiting forever.

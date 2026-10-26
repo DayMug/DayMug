@@ -23,6 +23,7 @@ type Store interface {
 	ConversationStore
 	MessageStore
 	MessageQueueStore
+	ScheduledPromptStore
 	AppSettingStore
 	BotThreadStore
 	UsageStore
@@ -383,6 +384,17 @@ type MessageQueueStore interface {
 	// processing). Used by the dispatcher at startup to spin up workers
 	// for unfinished work.
 	ListConversationsWithPending(ctx context.Context) ([]string, error)
+}
+
+// ScheduledPromptStore holds composer messages waiting for their send time.
+// The scheduler claims a due prompt by deleting it, the same call a user's
+// cancel makes, so exactly one of the two ever acts on a row.
+type ScheduledPromptStore interface {
+	CreateScheduledPrompt(ctx context.Context, p ScheduledPrompt) (ScheduledPrompt, error)
+	ListScheduledPrompts(ctx context.Context, conversationID string) ([]ScheduledPrompt, error)
+	ListDueScheduledPrompts(ctx context.Context, now time.Time) ([]ScheduledPrompt, error)
+	NextScheduledPromptTime(ctx context.Context) (time.Time, bool, error)
+	DeleteScheduledPrompt(ctx context.Context, conversationID, id string) (ScheduledPrompt, error)
 }
 
 // AppSettingStore is the key/value table behind admin-editable settings.

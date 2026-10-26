@@ -45,6 +45,10 @@ type clientMessage struct {
 	// input handler validates each relative path and rebuilds its authenticated
 	// read URL before persisting it; client-provided URLs are never trusted.
 	Attachments []webUploadAttachment `json:"attachments,omitempty"`
+	// SendAt, on an "input" frame, holds the prompt until that moment instead
+	// of sending it now (the composer's "send later"). Steer is ignored then:
+	// when it fires, the prompt queues like a plain send.
+	SendAt *time.Time `json:"send_at,omitempty"`
 }
 
 // serverMessage is the wire shape of every server→client WS event. The

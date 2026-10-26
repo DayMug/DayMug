@@ -87,6 +87,11 @@ var migrationSteps = []migrationStep{
 		destructive: true,
 		run:         dropPublishedSites,
 	},
+	// 115
+	{
+		desc: "create scheduled_prompts",
+		run:  createScheduledPrompts,
+	},
 }
 
 type appliedMigration struct {

@@ -27,6 +27,7 @@
         "running_agent_ids",
         "running_conversation_ids",
         "running_conversations",
+        "scheduled_prompts",
         "seq",
         "status",
         "subagent",

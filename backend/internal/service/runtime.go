@@ -57,6 +57,9 @@ type Runtime struct {
 	// NewRuntime with this Runtime's ProcessPrompt as its processor, so web
 	// chat and cron submissions run through the service layer directly.
 	Dispatcher *Dispatcher
+	// ScheduledPrompts fires composer messages held for a later send time.
+	// Built by NewRuntime alongside the Dispatcher it feeds.
+	ScheduledPrompts *ScheduledPromptScheduler
 
 	// TitleGen is the default auto-title generator; TitleGens overrides it
 	// per provider.
@@ -94,6 +97,7 @@ func NewRuntime(s store.Store, backends *BackendRegistry) *Runtime {
 		// swapping in a fake) is still what the next prompt sees.
 		rt.Dispatcher = NewDispatcher(s, rt.ProcessPrompt)
 		rt.Dispatcher.SetPauseGate(rt.Pause)
+		rt.ScheduledPrompts = NewScheduledPromptScheduler(rt)
 	}
 	return rt
 }
@@ -183,6 +187,7 @@ func (rt *Runtime) PromptIntake() *PromptIntake {
 		Drainer:     rt.Drainer,
 		Pause:       rt.Pause,
 		Persist:     rt.MessagePersister(),
+		Scheduled:   rt.ScheduledPrompts,
 	}
 }
 

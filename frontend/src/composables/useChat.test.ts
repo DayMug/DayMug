@@ -2528,3 +2528,114 @@ describe("useChat", () => {
     });
   });
 });
+
+describe("useChat scheduled prompts", () => {
+  it("sends a scheduled prompt as input with send_at and stages nothing locally", async () => {
+    const { useWebSocket } = await import("./useWebSocket");
+    const send = useWebSocket().send as unknown as ReturnType<typeof vi.fn>;
+    send.mockClear();
+    const { scheduleMessage, pendingPrompts, scheduledPrompts } = useChat();
+    const sendAt = new Date("2030-05-01T10:00:00Z");
+
+    scheduleMessage("later", undefined, sendAt);
+
+    expect(send).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "input",
+        content: "later",
+        send_at: "2030-05-01T10:00:00.000Z",
+      }),
+    );
+    expect(send.mock.calls[0][0]).not.toHaveProperty("steer");
+    expect(pendingPrompts.value).toEqual([]);
+    expect(scheduledPrompts.value).toEqual([]);
+  });
+
+  it("mirrors the server's scheduled list and drops attachment refs from the text", () => {
+    const { scheduledPrompts } = useChat();
+    const attachment = { name: "a.png", mime: "image/png", path: "p/a.png", url: "/u" };
+    fireMessage({
+      type: "scheduled_prompts",
+      scheduled_prompts: [
+        {
+          id: "s1",
+          conversation_id: "c1",
+          content: "look",
+          metadata: { attachments: [attachment] },
+          send_at: "2030-05-01T10:00:00Z",
+          created_at: "2030-05-01T09:00:00Z",
+        },
+      ],
+    });
+    expect(scheduledPrompts.value).toEqual([
+      { id: "s1", content: "look", attachments: [attachment], sendAt: "2030-05-01T10:00:00Z" },
+    ]);
+
+    // An absent list means none are left.
+    fireMessage({ type: "scheduled_prompts" });
+    expect(scheduledPrompts.value).toEqual([]);
+  });
+
+  it("adds an acknowledged prompt the broadcast missed, keeping send order", () => {
+    const { scheduledPrompts } = useChat();
+    const row = (id: string, at: string) => ({
+      id,
+      conversation_id: "c1",
+      content: id,
+      send_at: at,
+      created_at: at,
+    });
+    fireMessage({
+      type: "scheduled_prompts",
+      scheduled_prompts: [row("late", "2030-05-01T12:00:00Z")],
+    });
+    fireMessage({
+      type: "scheduled_ack",
+      scheduled_prompts: [row("early", "2030-05-01T10:00:00Z")],
+    });
+    fireMessage({
+      type: "scheduled_ack",
+      scheduled_prompts: [row("early", "2030-05-01T10:00:00Z")],
+    });
+    expect(scheduledPrompts.value.map((p) => p.id)).toEqual(["early", "late"]);
+  });
+
+  it("recalls a cancelled prompt only once the server confirms the removal", async () => {
+    const { useWebSocket } = await import("./useWebSocket");
+    const send = useWebSocket().send as unknown as ReturnType<typeof vi.fn>;
+    send.mockClear();
+    const { scheduledPrompts, cancelScheduledPrompt, recallText } = useChat();
+    const row = {
+      id: "s1",
+      conversation_id: "c1",
+      content: "edit me",
+      send_at: "2030-05-01T10:00:00Z",
+      created_at: "2030-05-01T09:00:00Z",
+    };
+    fireMessage({ type: "scheduled_prompts", scheduled_prompts: [row] });
+
+    cancelScheduledPrompt("s1");
+    expect(send).toHaveBeenCalledWith(
+      expect.objectContaining({ type: "cancel_scheduled", message_id: "s1" }),
+    );
+    expect(recallText.value).toBe("");
+
+    // Already fired: nothing comes back, nothing is recalled.
+    fireMessage({ type: "scheduled_prompt_cancelled" });
+    expect(recallText.value).toBe("");
+
+    fireMessage({ type: "scheduled_prompt_cancelled", scheduled_prompts: [row] });
+    expect(recallText.value).toBe("edit me");
+    expect(scheduledPrompts.value).toEqual([]);
+  });
+
+  it("hands the text back when the socket is down", async () => {
+    const { useWebSocket } = await import("./useWebSocket");
+    const send = useWebSocket().send as unknown as ReturnType<typeof vi.fn>;
+    send.mockReturnValueOnce(false);
+    const { scheduleMessage, recallText, chatMessages } = useChat();
+    scheduleMessage("offline", undefined, new Date("2030-05-01T10:00:00Z"));
+    expect(recallText.value).toBe("offline");
+    expect(chatMessages.value.at(-1)?.role).toBe("error");
+  });
+});

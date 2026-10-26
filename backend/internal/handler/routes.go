@@ -390,6 +390,9 @@ func (b *routeBuilder) recoverPendingPrompts() {
 	} else if resetRows > 0 || abandoned > 0 || resumed > 0 {
 		log.Printf("dispatcher recovery: reset %d processing→pending rows, abandoned %d exhausted prompts, resumed %d conversations", resetRows, abandoned, resumed)
 	}
+	// After recovery, so a scheduled prompt that came due while the server
+	// was down queues behind the prompts that were already waiting.
+	b.rt.ScheduledPrompts.Start()
 }
 
 // registerCronRoutes starts the scheduler and mounts crontab CRUD.

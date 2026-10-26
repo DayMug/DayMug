@@ -3,16 +3,27 @@
 // persistence in useChatDraft, so what remains here is the input itself and the
 // keyboard contract that ties the three together.
 import { ref, watch, nextTick, computed, toRef } from "vue";
-import { onClickOutside } from "@vueuse/core";
+import { onClickOutside, useNow } from "@vueuse/core";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { ArrowUp, ChevronUp, ListEnd, Paperclip } from "lucide-vue-next";
+import { ArrowUp, ChevronLeft, ChevronUp, Clock, ListEnd, Paperclip } from "lucide-vue-next";
 import ChatAttachmentStrip from "./ChatAttachmentStrip.vue";
 import { providerCapabilities, useModelRegistry } from "@/composables/useModelRegistry";
 import { isImageMime, useChatAttachments } from "@/composables/useChatAttachments";
 import { useChatDraft } from "@/composables/useChatDraft";
 import { isPrimaryModifier, primaryModifierLabel } from "@/lib/primaryModifier";
+import {
+  defaultAbsoluteSendAt,
+  formatSendAt,
+  formatUntil,
+  isValidSendAt,
+  parseLocalDateTime,
+  relativeSendAt,
+  toLocalDateTimeInput,
+  type ScheduleUnit,
+} from "@/lib/scheduleTime";
+import { useTimeFormat } from "@/composables/useTimeFormat";
 import { useI18n } from "vue-i18n";
 import type { MessageAttachment } from "@/composables/useWebSocket";
 
@@ -54,13 +65,16 @@ const props = withDefaults(
 
 const emit = defineEmits<{
   send: [text: string, attachments?: MessageAttachment[], insert?: boolean];
+  // "Send later": hold the message on the server until sendAt.
+  schedule: [text: string, attachments: MessageAttachment[] | undefined, sendAt: Date];
   cancel: [];
   // Fired once we've stuffed recallText into the editor, so the parent can
   // clear its own copy and avoid re-stuffing on the next render.
   "recall-consumed": [];
 }>();
 
-const { t } = useI18n();
+const { t, locale } = useI18n();
+const { timeHour12 } = useTimeFormat();
 const submitShortcut = computed(() => `${primaryModifierLabel()}+Enter`);
 
 // Every entry must teach something the UI doesn't already make obvious.
@@ -194,16 +208,19 @@ const canSend = computed(
 
 function closeSendMenu() {
   sendMenuOpen.value = false;
+  menuView.value = "options";
 }
 
 onClickOutside(sendControlsRef, closeSendMenu);
 
 type SendMode = "insert" | "queue";
 
-function handleSend(mode: SendMode = defaultSendMode.value) {
+// composeMessage turns the editor and its attachments into what goes over the
+// wire, or null when there is nothing sendable.
+function composeMessage(): { text: string; attachments?: MessageAttachment[] } | null {
   // A half-uploaded attachment would land in history with an unreachable path,
   // so canSend also gates on in-flight uploads.
-  if (!canSend.value) return;
+  if (!canSend.value) return null;
   const text = inputText.value.trim();
   const refs = attachments.value
     .map((a) => a.ref)
@@ -217,17 +234,100 @@ function handleSend(mode: SendMode = defaultSendMode.value) {
   const messageAttachments = attachments.value
     .filter((a) => a.url)
     .map((a) => ({ name: a.name, mime: a.mime, path: a.path, url: a.url! }));
-  const insert = mode === "insert";
-  if (messageAttachments.length > 0) {
-    emit("send", composed, messageAttachments, insert || undefined);
-  } else if (insert) {
-    emit("send", composed, undefined, true);
-  } else {
-    emit("send", composed);
-  }
+  return messageAttachments.length > 0
+    ? { text: composed, attachments: messageAttachments }
+    : { text: composed };
+}
+
+function clearComposer() {
   inputText.value = "";
   clearAfterSend();
   closeSendMenu();
+}
+
+function handleSend(mode: SendMode = defaultSendMode.value) {
+  const message = composeMessage();
+  if (!message) return;
+  const insert = mode === "insert";
+  if (message.attachments) {
+    emit("send", message.text, message.attachments, insert || undefined);
+  } else if (insert) {
+    emit("send", message.text, undefined, true);
+  } else {
+    emit("send", message.text);
+  }
+  clearComposer();
+}
+
+// --- Send later -----------------------------------------------------------
+// The menu's third mode. Relative ("in 30 minutes") covers the common case
+// in two clicks; absolute ("at 09:00 tomorrow") covers the rest. Either way
+// the server holds the message and sends it like a plain send when it is due.
+type ScheduleKind = "relative" | "absolute";
+const SCHEDULE_PRESETS: { amount: number; unit: ScheduleUnit }[] = [
+  { amount: 5, unit: "minutes" },
+  { amount: 15, unit: "minutes" },
+  { amount: 30, unit: "minutes" },
+  { amount: 1, unit: "hours" },
+  { amount: 2, unit: "hours" },
+  { amount: 1, unit: "days" },
+];
+const SCHEDULE_UNITS: ScheduleUnit[] = ["minutes", "hours", "days"];
+
+const menuView = ref<"options" | "schedule">("options");
+const scheduleKind = ref<ScheduleKind>("relative");
+const relativeAmount = ref<number | "">(30);
+const relativeUnit = ref<ScheduleUnit>("minutes");
+const absoluteValue = ref("");
+const now = useNow({ interval: 15_000 });
+
+const scheduledAt = computed<Date | null>(() =>
+  scheduleKind.value === "relative"
+    ? relativeSendAt(Number(relativeAmount.value), relativeUnit.value, now.value)
+    : parseLocalDateTime(absoluteValue.value),
+);
+const scheduleValid = computed(() => isValidSendAt(scheduledAt.value, now.value));
+const schedulePreview = computed(() => {
+  const at = scheduledAt.value;
+  if (!scheduleValid.value || !at) return t("chat.schedule.invalid");
+  return t("chat.schedule.preview", {
+    time: formatSendAt(at, now.value, locale.value, timeHour12.value),
+    relative: formatUntil(at, now.value, locale.value),
+  });
+});
+
+function presetLabel(p: { amount: number; unit: ScheduleUnit }): string {
+  return t(`chat.schedule.preset.${p.unit}`, { n: p.amount });
+}
+
+function presetActive(p: { amount: number; unit: ScheduleUnit }): boolean {
+  return (
+    scheduleKind.value === "relative" &&
+    Number(relativeAmount.value) === p.amount &&
+    relativeUnit.value === p.unit
+  );
+}
+
+function pickPreset(p: { amount: number; unit: ScheduleUnit }) {
+  scheduleKind.value = "relative";
+  relativeAmount.value = p.amount;
+  relativeUnit.value = p.unit;
+}
+
+function openSchedule() {
+  if (!absoluteValue.value || !isValidSendAt(parseLocalDateTime(absoluteValue.value), now.value)) {
+    absoluteValue.value = toLocalDateTimeInput(defaultAbsoluteSendAt(now.value));
+  }
+  menuView.value = "schedule";
+}
+
+function handleSchedule() {
+  const at = scheduledAt.value;
+  if (!isValidSendAt(at, new Date())) return;
+  const message = composeMessage();
+  if (!message) return;
+  emit("schedule", message.text, message.attachments, at);
+  clearComposer();
 }
 
 const { registry, ensureLoaded: ensureModelRegistry } = useModelRegistry();
@@ -255,11 +355,13 @@ const sendLabel = computed(() => {
     : t("chat.queueShortcut", { shortcut });
 });
 
-watch(
-  () => props.isThinking,
-  (thinking) => {
-    if (!thinking) closeSendMenu();
-  },
+// "Send now" is the disc's own action, repeated in the menu so the three modes
+// read as one choice. A CLI transport can't take input mid-turn, so while it
+// works there is no "now" to offer — only after completion or later.
+const canSendNow = computed(() => !props.isThinking || canInsert.value);
+const sendNowLabel = computed(() => (props.isThinking ? t("chat.insertNow") : t("chat.sendNow")));
+const sendNowHint = computed(() =>
+  props.isThinking ? t("chat.insertNowHint") : t("chat.sendNowHint"),
 );
 
 function handleKeydown(e: KeyboardEvent) {
@@ -395,10 +497,10 @@ defineExpose({ focus: focusInput });
           <!-- ml-auto keeps the fixed-size action cluster at the right edge while
                the model label yields width through truncation when necessary. -->
           <div class="ml-auto flex shrink-0 items-center gap-2" data-testid="composer-send-cluster">
-            <!-- The primary half inserts into a live task by default. The
-               up-arrow exposes the less common FIFO path for a message that
-               should wait until the current task finishes. CLI transports
-               can't insert, so there the disc queues and the chevron goes. -->
+            <!-- The disc sends now: into the live task when the transport can
+               take it, otherwise plainly (or, on a busy CLI transport, after
+               the current task). The chevron opens the three send modes —
+               now, after the current task, or at a chosen time. -->
             <Button
               v-if="isThinking"
               variant="destructive"
@@ -416,12 +518,12 @@ defineExpose({ focus: focusInput });
               data-testid="send-controls"
               @keydown.esc="closeSendMenu"
             >
-              <!-- The FIFO path is the rarer one, so it gets the quiet ghost
-                   chevron and the primary action keeps the filled disc. The
-                   disc carries no visible label, so `aria-label` is what a
+              <!-- The other modes are the rarer path, so they get the quiet
+                   ghost chevron and the primary action keeps the filled disc.
+                   The disc carries no visible label, so `aria-label` is what a
                    screen reader announces — it must stay in sync with the
                    tooltip's send/insert wording. -->
-              <Tooltip v-if="isThinking && canInsert">
+              <Tooltip>
                 <TooltipTrigger as-child>
                   <Button
                     type="button"
@@ -432,7 +534,7 @@ defineExpose({ focus: focusInput });
                     :aria-expanded="sendMenuOpen"
                     data-testid="send-options-btn"
                     :disabled="!canSend"
-                    @click="sendMenuOpen = !sendMenuOpen"
+                    @click="sendMenuOpen ? closeSendMenu() : (sendMenuOpen = true)"
                   >
                     <ChevronUp :size="15" />
                   </Button>
@@ -457,29 +559,177 @@ defineExpose({ focus: focusInput });
               </Tooltip>
 
               <div
-                v-if="sendMenuOpen && isThinking && canInsert"
+                v-if="sendMenuOpen"
                 role="menu"
                 data-testid="send-options-menu"
-                class="absolute bottom-full right-0 z-50 mb-2 w-60 max-w-[calc(100vw-2rem)] rounded-xl border border-border bg-popover p-1.5 text-popover-foreground shadow-xl"
+                class="absolute bottom-full right-0 z-50 mb-2 w-72 max-w-[calc(100vw-2rem)] rounded-xl border border-border bg-popover p-1.5 text-popover-foreground shadow-xl"
               >
-                <button
-                  type="button"
-                  role="menuitem"
-                  data-testid="queue-after-current-btn"
-                  class="flex w-full items-start gap-2.5 rounded-lg px-3 py-2.5 text-left outline-none transition-colors hover:bg-accent focus-visible:bg-accent focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
-                  :disabled="!canSend"
-                  @click="handleSend('queue')"
+                <template v-if="menuView === 'options'">
+                  <button
+                    v-if="canSendNow"
+                    type="button"
+                    role="menuitem"
+                    data-testid="send-now-btn"
+                    class="send-menu-item"
+                    :disabled="!canSend"
+                    @click="handleSend(isThinking ? 'insert' : 'queue')"
+                  >
+                    <ArrowUp :size="16" class="mt-0.5 shrink-0" />
+                    <span class="min-w-0">
+                      <span class="block text-sm font-semibold">{{ sendNowLabel }}</span>
+                      <span class="mt-0.5 block text-xs leading-4 text-muted-foreground">{{
+                        sendNowHint
+                      }}</span>
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    data-testid="queue-after-current-btn"
+                    class="send-menu-item"
+                    :disabled="!canSend || !isThinking"
+                    @click="handleSend('queue')"
+                  >
+                    <ListEnd :size="16" class="mt-0.5 shrink-0" />
+                    <span class="min-w-0">
+                      <span class="block text-sm font-semibold">{{
+                        t("chat.sendAfterCurrent")
+                      }}</span>
+                      <span class="mt-0.5 block text-xs leading-4 text-muted-foreground">{{
+                        isThinking ? t("chat.sendAfterCurrentHint") : t("chat.sendAfterCurrentIdle")
+                      }}</span>
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    data-testid="schedule-send-btn"
+                    class="send-menu-item"
+                    :disabled="!canSend"
+                    @click="openSchedule"
+                  >
+                    <Clock :size="16" class="mt-0.5 shrink-0" />
+                    <span class="min-w-0">
+                      <span class="block text-sm font-semibold">{{ t("chat.schedule.menu") }}</span>
+                      <span class="mt-0.5 block text-xs leading-4 text-muted-foreground">{{
+                        t("chat.schedule.menuHint")
+                      }}</span>
+                    </span>
+                  </button>
+                </template>
+
+                <div
+                  v-else
+                  class="flex flex-col gap-2.5 p-1.5"
+                  data-testid="schedule-panel"
+                  @keydown.enter.prevent="handleSchedule"
                 >
-                  <ListEnd :size="16" class="mt-0.5 shrink-0" />
-                  <span class="min-w-0">
-                    <span class="block text-sm font-semibold">{{
-                      t("chat.sendAfterCurrent")
-                    }}</span>
-                    <span class="mt-0.5 block text-xs leading-4 text-muted-foreground">{{
-                      t("chat.sendAfterCurrentHint")
-                    }}</span>
-                  </span>
-                </button>
+                  <div class="flex items-center gap-1">
+                    <button
+                      type="button"
+                      class="-ml-1 flex size-6 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
+                      :aria-label="t('chat.schedule.back')"
+                      data-testid="schedule-back-btn"
+                      @click="menuView = 'options'"
+                    >
+                      <ChevronLeft :size="15" />
+                    </button>
+                    <span class="text-sm font-semibold">{{ t("chat.schedule.title") }}</span>
+                  </div>
+
+                  <div
+                    role="tablist"
+                    class="grid grid-cols-2 gap-0.5 rounded-lg bg-muted p-0.5 text-xs font-medium"
+                  >
+                    <button
+                      v-for="kind in ['relative', 'absolute'] as const"
+                      :key="kind"
+                      type="button"
+                      role="tab"
+                      :aria-selected="scheduleKind === kind"
+                      :data-testid="`schedule-kind-${kind}`"
+                      class="rounded-md px-2 py-1 transition-colors"
+                      :class="
+                        scheduleKind === kind
+                          ? 'bg-background text-foreground shadow-sm'
+                          : 'text-muted-foreground hover:text-foreground'
+                      "
+                      @click="scheduleKind = kind"
+                    >
+                      {{ t(`chat.schedule.${kind}`) }}
+                    </button>
+                  </div>
+
+                  <template v-if="scheduleKind === 'relative'">
+                    <div class="grid grid-cols-3 gap-1.5">
+                      <button
+                        v-for="preset in SCHEDULE_PRESETS"
+                        :key="`${preset.amount}-${preset.unit}`"
+                        type="button"
+                        data-testid="schedule-preset"
+                        class="rounded-md border px-2 py-1 text-xs transition-colors"
+                        :class="
+                          presetActive(preset)
+                            ? 'border-foreground/40 bg-accent text-foreground'
+                            : 'border-border text-muted-foreground hover:bg-accent hover:text-foreground'
+                        "
+                        @click="pickPreset(preset)"
+                      >
+                        {{ presetLabel(preset) }}
+                      </button>
+                    </div>
+                    <label class="flex items-center gap-2 text-xs text-muted-foreground">
+                      <span class="shrink-0">{{ t("chat.schedule.after") }}</span>
+                      <input
+                        v-model.number="relativeAmount"
+                        type="number"
+                        min="1"
+                        step="1"
+                        inputmode="numeric"
+                        data-testid="schedule-amount"
+                        class="h-8 w-16 min-w-0 rounded-md border border-border bg-background px-2 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      />
+                      <select
+                        v-model="relativeUnit"
+                        data-testid="schedule-unit"
+                        :aria-label="t('chat.schedule.unit')"
+                        class="h-8 min-w-0 flex-1 rounded-md border border-border bg-background px-2 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      >
+                        <option v-for="unit in SCHEDULE_UNITS" :key="unit" :value="unit">
+                          {{ t(`chat.schedule.units.${unit}`) }}
+                        </option>
+                      </select>
+                    </label>
+                  </template>
+                  <input
+                    v-else
+                    v-model="absoluteValue"
+                    type="datetime-local"
+                    :min="toLocalDateTimeInput(now)"
+                    :aria-label="t('chat.schedule.absolute')"
+                    data-testid="schedule-datetime"
+                    class="h-8 w-full rounded-md border border-border bg-background px-2 text-sm text-foreground outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  />
+
+                  <p
+                    class="text-xs"
+                    :class="scheduleValid ? 'text-muted-foreground' : 'text-destructive'"
+                    data-testid="schedule-preview"
+                  >
+                    {{ schedulePreview }}
+                  </p>
+                  <Button
+                    type="button"
+                    size="sm"
+                    class="h-8 w-full"
+                    data-testid="schedule-confirm-btn"
+                    :disabled="!canSend || !scheduleValid"
+                    @click="handleSchedule"
+                  >
+                    <Clock :size="14" />
+                    {{ t("chat.schedule.confirm") }}
+                  </Button>
+                </div>
               </div>
             </div>
           </div>
@@ -490,6 +740,29 @@ defineExpose({ focus: focusInput });
 </template>
 
 <style scoped>
+.send-menu-item {
+  display: flex;
+  width: 100%;
+  align-items: flex-start;
+  gap: 0.625rem;
+  border-radius: 0.5rem;
+  padding: 0.625rem 0.75rem;
+  text-align: left;
+  outline: none;
+  transition: background-color 150ms;
+}
+.send-menu-item:hover:not(:disabled),
+.send-menu-item:focus-visible {
+  background: var(--accent);
+}
+.send-menu-item:focus-visible {
+  box-shadow: 0 0 0 2px var(--ring);
+}
+.send-menu-item:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
 /* Single-line state: the textarea is exactly 36px tall and the line-height
  * matches the box, so the cursor / placeholder / first line of typed text all
  * sit on the typographic center of the pill. Mobile browsers were previously

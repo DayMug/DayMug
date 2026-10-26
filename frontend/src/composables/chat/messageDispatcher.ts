@@ -21,6 +21,8 @@ import type {
   WSPromptStartedFrame,
   WSQueueStatusFrame,
   WSResultFrame,
+  WSScheduledPrompt,
+  WSScheduledPromptsFrame,
   WSSessionInfoFrame,
   WSSessionWarningFrame,
   WSStatusFrame,
@@ -51,6 +53,8 @@ import {
   publishConversationListEvent,
   publishConversationListResync,
   publishTitleUpdate,
+  recallAttachments,
+  recallText,
 } from "@/stores/activeConversationStore";
 import { applyConversationActivity } from "@/stores/agentActivityStore";
 import { bumpAttentionVersion } from "@/stores/conversationAttentionStore";
@@ -71,7 +75,9 @@ import {
   queueAhead,
   queuePosition,
   queueRunning,
+  scheduledPrompts,
   startedPromptIds,
+  type ScheduledPrompt,
 } from "@/stores/chatQueueStore";
 import {
   armTurnIdleFallback,
@@ -154,6 +160,9 @@ const KNOWN_MESSAGE_TYPES: Record<WSMessageType, true> = {
   prompt_started: true,
   persist_failed: true,
   cancel_ack: true,
+  scheduled_prompts: true,
+  scheduled_ack: true,
+  scheduled_prompt_cancelled: true,
   error: true,
   session_info: true,
   session_warning: true,
@@ -1089,6 +1098,49 @@ function handleCancelAck(msg: WSCancelAckFrame) {
   }
 }
 
+function toScheduledPrompt(p: WSScheduledPrompt): ScheduledPrompt {
+  return {
+    id: p.id,
+    content: displayMessageContent(p.content, undefined, p.metadata?.attachments),
+    ...(p.metadata?.attachments?.length ? { attachments: p.metadata.attachments } : {}),
+    sendAt: p.send_at,
+  };
+}
+
+function sortScheduled(list: ScheduledPrompt[]): ScheduledPrompt[] {
+  return list.sort((a, b) => Date.parse(a.sendAt) - Date.parse(b.sendAt));
+}
+
+function handleScheduledPrompts(msg: WSScheduledPromptsFrame) {
+  const prompts = msg.scheduled_prompts ?? [];
+  switch (msg.type) {
+    case "scheduled_prompts":
+      scheduledPrompts.value = prompts.map(toScheduledPrompt);
+      break;
+    case "scheduled_ack": {
+      // Usually the broadcast list already has it; the ack only matters when
+      // that frame was dropped under backpressure.
+      const known = new Set(scheduledPrompts.value.map((p) => p.id));
+      const added = prompts.filter((p) => !known.has(p.id)).map(toScheduledPrompt);
+      if (added.length > 0) {
+        scheduledPrompts.value = sortScheduled([...scheduledPrompts.value, ...added]);
+      }
+      break;
+    }
+    case "scheduled_prompt_cancelled": {
+      // Recall only what the server confirms it removed: a prompt that fired
+      // while the cancel was in flight is already in the conversation.
+      const dropped = prompts[0];
+      if (!dropped) break;
+      scheduledPrompts.value = scheduledPrompts.value.filter((p) => p.id !== dropped.id);
+      const recalled = toScheduledPrompt(dropped);
+      recallAttachments.value = recalled.attachments ?? [];
+      recallText.value = recalled.content;
+      break;
+    }
+  }
+}
+
 // Errors that reject one inbound client frame without touching whatever the
 // agent is doing. Every string here is written by handler/terminal_ws.go
 // straight back to the socket that sent the offending frame: the run in
@@ -1114,6 +1166,8 @@ const NON_FATAL_ERROR_MESSAGES = new Set([
   "init required before answering a question",
   "invalid user question response",
   "the user question is no longer active",
+  "invalid scheduled time",
+  "failed to schedule prompt",
 ]);
 
 function handleError(msg: WSErrorFrame) {
@@ -1277,6 +1331,11 @@ export function createMessageDispatcher(): (msg: WSMessage) => void {
         break;
       case "cancel_ack":
         handleCancelAck(msg);
+        break;
+      case "scheduled_prompts":
+      case "scheduled_ack":
+      case "scheduled_prompt_cancelled":
+        handleScheduledPrompts(msg);
         break;
       case "error":
         handleError(msg);

@@ -5,14 +5,16 @@
 // they travel as a single component rather than being re-paired in each layout.
 import { ref } from "vue";
 import PendingPromptsArea from "./PendingPromptsArea.vue";
+import ScheduledPromptsArea from "./ScheduledPromptsArea.vue";
 import ChatInput from "./ChatInput.vue";
 import AskUserQuestionCard from "./AskUserQuestionCard.vue";
-import type { PendingPrompt } from "@/composables/useChat";
+import type { PendingPrompt, ScheduledPrompt } from "@/composables/useChat";
 import type { MessageAttachment } from "@/composables/useWebSocket";
 import type { UserQuestionRequest } from "@/composables/useWebSocket";
 
 defineProps<{
   prompts: PendingPrompt[];
+  scheduledPrompts?: ScheduledPrompt[];
   hasActiveTask: boolean;
   isThinking: boolean;
   turnStatusKnown: boolean;
@@ -28,8 +30,10 @@ defineProps<{
 
 const emit = defineEmits<{
   send: [text: string, attachments?: MessageAttachment[], insert?: boolean];
+  schedule: [text: string, attachments: MessageAttachment[] | undefined, sendAt: Date];
   cancel: [];
   "cancel-prompt": [id: string];
+  "cancel-scheduled": [id: string];
   "recall-consumed": [];
   answer: [requestId: string, answers: Record<string, string[]>];
 }>();
@@ -63,6 +67,10 @@ defineExpose({ focus: () => chatInputRef.value?.focus() });
       :is-connected="isConnected"
       @answer="forwardAnswer"
     />
+    <ScheduledPromptsArea
+      :prompts="scheduledPrompts ?? []"
+      @cancel="emit('cancel-scheduled', $event)"
+    />
     <PendingPromptsArea
       :prompts="prompts"
       :has-active-task="hasActiveTask"
@@ -79,6 +87,7 @@ defineExpose({ focus: () => chatInputRef.value?.focus() });
       :provider="provider"
       :image-input-unsupported="imageInputUnsupported"
       @send="forwardSend"
+      @schedule="(text, attachments, sendAt) => emit('schedule', text, attachments, sendAt)"
       @cancel="emit('cancel')"
       @recall-consumed="emit('recall-consumed')"
     >

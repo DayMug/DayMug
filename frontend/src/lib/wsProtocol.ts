@@ -235,6 +235,29 @@ export interface WSCancelAckFrame extends WSFrameBase {
   cancelled_prompts?: WSPersistedMessage[];
 }
 
+// A composer message held for a later send time (store.ScheduledPrompt).
+export interface WSScheduledPrompt {
+  id: string;
+  conversation_id: string;
+  content: string;
+  // Resolved upload attachments, copied onto the message when it fires.
+  metadata?: AssistantMetadata;
+  // RFC 3339, UTC, whole seconds.
+  send_at: string;
+  created_at: string;
+}
+
+// scheduled_prompts: the conversation's complete "send later" list, broadcast
+// on every change and offered on init when non-empty; absent = none left.
+// scheduled_ack: the sender's confirmation, carrying the one stored prompt.
+// scheduled_prompt_cancelled: the sender's cancel result, carrying the removed
+// prompt — absent when it had already fired, so there is nothing to recall.
+export interface WSScheduledPromptsFrame extends WSFrameBase {
+  type: "scheduled_prompts" | "scheduled_ack" | "scheduled_prompt_cancelled";
+  message_id?: string;
+  scheduled_prompts?: WSScheduledPrompt[];
+}
+
 export interface WSErrorFrame extends WSFrameBase, WSReplayable {
   type: "error";
   // Always non-empty on every emitter.
@@ -329,6 +352,7 @@ export type WSKnownMessage =
   | WSAttentionChangedFrame
   | WSHistoryBackfillFrame
   | WSCancelAckFrame
+  | WSScheduledPromptsFrame
   | WSErrorFrame
   | WSSessionInfoFrame
   | WSSessionWarningFrame
