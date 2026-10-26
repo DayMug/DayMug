@@ -8,7 +8,8 @@
 //   toggle on the right, and no title — the transcript is what the screen is
 //   for, and the conversation's name is one tap away on the list. With
 //   `floating` the bar takes no height at all: it lies over the transcript,
-//   which scrolls up underneath it and fades out behind the buttons.
+//   which scrolls up underneath it and is cut off cleanly behind the bar's
+//   solid fill — a fade let half-transparent text show through on iOS.
 // - `list`: product mark on the left, a shortcut back into the open
 //   conversation in the centre, task activity and the account on the right.
 import { ref } from "vue";
@@ -78,7 +79,7 @@ const chip =
     :class="[
       variant === 'list' ? 'grid grid-cols-[88px_minmax(0,1fr)_88px]' : 'flex justify-between',
       floating
-        ? 'pointer-events-none absolute inset-x-0 top-0 bg-gradient-to-b from-background from-55% to-transparent [&_button]:pointer-events-auto'
+        ? 'pointer-events-none absolute inset-x-0 top-0 bg-background [&_button]:pointer-events-auto'
         : 'relative',
     ]"
     :data-variant="variant"
@@ -94,9 +95,7 @@ const chip =
       <span :class="chip"><Menu class="size-[18px]" /></span>
     </button>
     <span v-else class="grid size-11 place-items-center" data-testid="mobile-brand-mark">
-      <span
-        class="grid size-8 place-items-center rounded-[10px] bg-[linear-gradient(145deg,#2b2b2b,#191919_58%,#3a3a3a)] text-white"
-      >
+      <span class="grid size-8 place-items-center rounded-[10px] bg-[#1f1f1f] text-white">
         <Coffee class="size-[17px]" />
       </span>
     </span>

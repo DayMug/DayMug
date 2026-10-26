@@ -53,6 +53,17 @@ describe("ChatMobileHeader", () => {
     expect(bar.classes()).toContain("[&_button]:pointer-events-auto");
   });
 
+  it("covers the transcript with a solid fill, not a fade", () => {
+    // A see-through gradient let scrolled text ghost through behind the
+    // buttons; the bar must hide what passes under it outright.
+    for (const props of [{ floating: true }, { floating: false }, { variant: "list" as const }]) {
+      expect(mountHeader(props).html()).not.toMatch(/gradient/);
+    }
+    expect(mountHeader({ floating: true }).get(".mobile-global-bar").classes()).toContain(
+      "bg-background",
+    );
+  });
+
   it("flips between transcript and artifacts from one toggle", async () => {
     const wrapper = mountHeader();
     const toggle = wrapper.get('[data-testid="mobile-artifacts-toggle"]');
