@@ -407,11 +407,15 @@ describe("ChatPage", () => {
       expect(wrapper.find("[data-testid='mobile-project-header']").exists()).toBe(false);
       expect(wrapper.find(".mobile-workspace-nav").exists()).toBe(false);
       expect(wrapper.findComponent({ name: "WorkspacePanel" }).exists()).toBe(false);
+      // Over the transcript the bar floats; over the artifacts it sits in flow
+      // so it doesn't cover the file toolbar.
+      expect(wrapper.get(".mobile-global-bar").classes()).toContain("absolute");
 
       await wrapper.find("[data-testid='mobile-artifacts-toggle']").trigger("click");
       await flushPromises();
       expect(wrapper.findComponent({ name: "WorkspacePanel" }).exists()).toBe(true);
       expect(sharedRouter.currentRoute.value.query.view).toBe("artifacts");
+      expect(wrapper.get(".mobile-global-bar").classes()).not.toContain("absolute");
 
       await wrapper.find("[data-testid='mobile-artifacts-toggle']").trigger("click");
       await flushPromises();

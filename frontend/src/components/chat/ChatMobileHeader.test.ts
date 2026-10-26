@@ -40,9 +40,17 @@ describe("ChatMobileHeader", () => {
     expect(mountHeader().find(".mobile-global-bar").classes().join(" ")).not.toMatch(/border-b/);
   });
 
-  it("shows the agent under the conversation title", () => {
-    const wrapper = mountHeader({ subtitle: "Payments bot" });
-    expect(wrapper.get('[data-testid="mobile-header-subtitle"]').text()).toBe("Payments bot");
+  it("leaves the title off the conversation screen so the transcript gets the room", () => {
+    const wrapper = mountHeader();
+    expect(wrapper.find('[data-testid="mobile-header-title"]').exists()).toBe(false);
+    expect(wrapper.text()).not.toContain("Refactor the parser");
+  });
+
+  it("takes no height when floating, but its buttons still take taps", () => {
+    const bar = mountHeader({ floating: true }).get(".mobile-global-bar");
+    expect(bar.classes()).toContain("absolute");
+    expect(bar.classes()).toContain("pointer-events-none");
+    expect(bar.classes()).toContain("[&_button]:pointer-events-auto");
   });
 
   it("flips between transcript and artifacts from one toggle", async () => {
@@ -68,13 +76,13 @@ describe("ChatMobileHeader", () => {
   it("does not make the list title tappable when there is nothing to resume", async () => {
     const wrapper = mountHeader({ variant: "list", canResume: false });
     const title = wrapper.get('[data-testid="mobile-header-title"]');
-    expect(title.element.tagName).toBe("DIV");
+    expect(title.element.tagName).toBe("SPAN");
     await title.trigger("click");
     expect(wrapper.emitted("resume")).toBeUndefined();
   });
 
-  it("shows the conversation title", () => {
-    expect(mountHeader().text()).toContain("Refactor the parser");
+  it("shows the open conversation's title on the list", () => {
+    expect(mountHeader({ variant: "list" }).text()).toContain("Refactor the parser");
   });
 
   it("opens account settings from the avatar on the list", async () => {

@@ -169,7 +169,7 @@ function backMobile() {
 }
 
 const swipeBack = useSwipeBack(backMobile);
-
+// Conversation title for the desktop top bar — falls back to a friendly label when
 // Conversation title for both top bars — falls back to a friendly label when
 // the conversation hasn't been renamed yet.
 const conversationTitle = computed(() => {
@@ -363,14 +363,12 @@ function trimTrailingSlashes(path: string): string {
     @touchend="swipeBack.onTouchEnd"
     @touchcancel="swipeBack.onTouchCancel"
   >
-    <!-- One floating bar is the only fixed chrome. The agent name, which
-         used to fill a second bar of its own, rides under the title, and the
-         artifacts screen is a toggle here instead of a bottom tab bar — every
-         pixel of that went to the transcript. -->
+    <!-- The only chrome is a pair of floating buttons. On the transcript the
+         bar takes no height: messages scroll up underneath it. The artifacts
+         screen keeps it in flow, because its own toolbar sits at the top. -->
     <ChatMobileHeader
       :account-label="authMe?.name || authMe?.username || currentUser?.name || t('chat.back')"
-      :title="conversationTitle"
-      :subtitle="currentUser?.name"
+      :floating="mobileTab === 'chat'"
       :notifications-enabled="mobileConversationNotifEnabled"
       :artifacts-open="mobileTab === 'files'"
       @back="backMobile()"
@@ -383,7 +381,7 @@ function trimTrailingSlashes(path: string): string {
     <template v-if="mobileTab === 'chat'">
       <div
         ref="chatPanelRef"
-        class="flex-1 overflow-y-auto overflow-x-hidden touch-pan-y overscroll-y-contain bg-background px-4 pb-3 pt-2"
+        class="flex-1 overflow-y-auto overflow-x-hidden touch-pan-y overscroll-y-contain bg-background px-4 pb-3 pt-[52px]"
         @scroll="onChatScroll"
       >
         <ChatTranscript

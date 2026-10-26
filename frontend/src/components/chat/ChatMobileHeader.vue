@@ -4,8 +4,11 @@
 // as one sheet with a few floating controls rather than a stack of bars.
 //
 // Two variants share it so the bar does not jump when moving between screens:
-// - `conversation`: list button on the left, the conversation and its agent in
-//   the centre, task activity and the artifacts toggle on the right.
+// - `conversation`: list button on the left, task activity and the artifacts
+//   toggle on the right, and no title — the transcript is what the screen is
+//   for, and the conversation's name is one tap away on the list. With
+//   `floating` the bar takes no height at all: it lies over the transcript,
+//   which scrolls up underneath it and fades out behind the buttons.
 // - `list`: product mark on the left, a shortcut back into the open
 //   conversation in the centre, task activity and the account on the right.
 import { ref } from "vue";
@@ -21,17 +24,17 @@ import {
 } from "lucide-vue-next";
 import TaskActivityButton from "./TaskActivityButton.vue";
 
-const props = withDefaults(
+withDefaults(
   defineProps<{
     variant?: "conversation" | "list";
     accountLabel: string;
-    title: string;
-    subtitle?: string;
+    title?: string;
+    floating?: boolean;
     notificationsEnabled: boolean;
     artifactsOpen?: boolean;
     canResume?: boolean;
   }>(),
-  { variant: "conversation", subtitle: "", artifactsOpen: false, canResume: false },
+  { variant: "conversation", title: "", floating: false, artifactsOpen: false, canResume: false },
 );
 
 const emit = defineEmits<{
@@ -58,10 +61,6 @@ function enableNotifications() {
   emit("toggle-notifications");
 }
 
-function onTitleClick() {
-  if (props.variant === "list" && props.canResume) emit("resume");
-}
-
 // Every control is a 44px target (the floor Apple and Google both set) with a
 // smaller visible chip inside, so the bar stays light without being fiddly.
 const target = "group grid size-11 shrink-0 place-items-center";
@@ -70,10 +69,18 @@ const chip =
 </script>
 
 <template>
-  <!-- Side columns are equal (two 44px targets each) so the title is centred
-       on the screen, not on whatever space one side happens to leave. -->
+  <!-- On the list, side columns are equal (two 44px targets each) so the
+       title is centred on the screen, not on whatever space one side leaves.
+       Floating, the bar itself ignores touches so the transcript under its
+       empty middle still scrolls; only the buttons take them. -->
   <header
-    class="mobile-global-bar relative z-30 grid h-[52px] shrink-0 grid-cols-[88px_minmax(0,1fr)_88px] items-center gap-1 px-1.5"
+    class="mobile-global-bar z-30 h-[52px] shrink-0 items-center gap-1 px-1.5"
+    :class="[
+      variant === 'list' ? 'grid grid-cols-[88px_minmax(0,1fr)_88px]' : 'flex justify-between',
+      floating
+        ? 'pointer-events-none absolute inset-x-0 top-0 bg-gradient-to-b from-background from-55% to-transparent [&_button]:pointer-events-auto'
+        : 'relative',
+    ]"
     :data-variant="variant"
   >
     <button
@@ -94,30 +101,25 @@ const chip =
       </span>
     </span>
 
-    <component
-      :is="variant === 'list' && canResume ? 'button' : 'div'"
-      :type="variant === 'list' && canResume ? 'button' : undefined"
-      class="flex min-w-0 flex-col items-center justify-center px-1 text-center"
-      :class="{ 'active:opacity-60': variant === 'list' && canResume }"
+    <button
+      v-if="variant === 'list' && canResume"
+      type="button"
+      class="flex min-w-0 items-center justify-center gap-0.5 px-1 active:opacity-60"
       data-testid="mobile-header-title"
-      @click="onTitleClick"
+      @click="emit('resume')"
     >
       <span
-        class="flex max-w-full items-center gap-0.5 text-[15px] font-semibold leading-5 tracking-[-0.01em] text-[#1f2023] dark:text-foreground"
+        class="truncate text-[15px] font-semibold leading-5 tracking-[-0.01em] text-[#1f2023] dark:text-foreground"
+        >{{ title }}</span
       >
-        <span class="truncate">{{ title }}</span>
-        <ChevronRight
-          v-if="variant === 'list' && canResume"
-          class="size-3.5 shrink-0 text-muted-foreground"
-        />
-      </span>
-      <span
-        v-if="subtitle"
-        class="max-w-full truncate text-[11.5px] leading-4 text-muted-foreground"
-        data-testid="mobile-header-subtitle"
-        >{{ subtitle }}</span
-      >
-    </component>
+      <ChevronRight class="size-3.5 shrink-0 text-muted-foreground" />
+    </button>
+    <span
+      v-else-if="variant === 'list'"
+      class="truncate px-1 text-center text-[15px] font-semibold leading-5 tracking-[-0.01em] text-[#1f2023] dark:text-foreground"
+      data-testid="mobile-header-title"
+      >{{ title }}</span
+    >
 
     <div class="flex items-center justify-end">
       <TaskActivityButton ref="activity">
