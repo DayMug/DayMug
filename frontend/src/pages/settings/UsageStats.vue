@@ -47,8 +47,8 @@ function oneOf<T extends string>(value: string, allowed: readonly T[], fallback:
   return allowed.includes(value as T) ? (value as T) : fallback;
 }
 
-const groupOptions = ["day", "user", "agent", "model", "conversation"] as const;
-const rankOptions = ["user", "agent", "model", "conversation", "cron"] as const;
+const groupOptions = ["day", "user", "agent", "model"] as const;
+const rankOptions = ["user", "agent", "model"] as const;
 const sortOptions = [
   "cost",
   "total_tokens",
@@ -65,10 +65,9 @@ const userFilter = ref(queryString("user_id"));
 const agentFilter = ref(queryString("agent_id"));
 const providerFilter = ref(queryString("provider"));
 const modelFilter = ref(queryString("model"));
-const conversationFilter = ref(queryString("conversation_id"));
 const sourceFilter = ref(queryString("source_type"));
 const groupBy = ref<UsageGroupBy>(oneOf(queryString("group_by"), groupOptions, "day"));
-const rankBy = ref<UsageRankBy>(oneOf(queryString("rank_by"), rankOptions, "conversation"));
+const rankBy = ref<UsageRankBy>(oneOf(queryString("rank_by"), rankOptions, "user"));
 const sortBy = ref<UsageSortBy>(oneOf(queryString("sort_by"), sortOptions, "cost"));
 const sortOrder = ref<"asc" | "desc">(queryString("sort_order") === "asc" ? "asc" : "desc");
 const page = ref(Math.max(1, Number(queryString("page", "1")) || 1));
@@ -87,7 +86,6 @@ function currentQuery(): UsageInsightsQuery {
     agent_id: agentFilter.value || undefined,
     provider: providerFilter.value || undefined,
     model: modelFilter.value || undefined,
-    conversation_id: conversationFilter.value || undefined,
     source_type: (sourceFilter.value || undefined) as "manual" | "cron" | undefined,
     group_by: groupBy.value,
     rank_by: rankBy.value,
@@ -145,7 +143,6 @@ const filterState = [
   agentFilter,
   providerFilter,
   modelFilter,
-  conversationFilter,
   sourceFilter,
   groupBy,
   rankBy,
@@ -268,7 +265,6 @@ function clearFilters() {
   agentFilter.value = "";
   providerFilter.value = "";
   modelFilter.value = "";
-  conversationFilter.value = "";
   sourceFilter.value = "";
 }
 
@@ -280,20 +276,10 @@ function anomalyText(anomaly: UsageAnomaly): string {
   return t(`settings.usage.anomalies.${anomaly.code}`);
 }
 
-function openConversation(row: UsageRankingRow) {
-  if (rankBy.value !== "conversation" || !row.conversation_id || !row.agent_id) return;
-  void router.push({
-    name: "chat",
-    params: { userId: row.agent_id, conversationId: row.conversation_id },
-  });
-}
-
 function rowTitle(row: UsageRankingRow): string {
-  if (rankBy.value === "cron") return row.cron_job_name || row.cron_job_id;
   if (rankBy.value === "model") return row.model;
   if (rankBy.value === "agent") return row.agent_name || row.agent_id;
-  if (rankBy.value === "user") return row.owner_name || row.owner_id;
-  return row.conversation_title || row.conversation_id;
+  return row.owner_name || row.owner_id;
 }
 </script>
 
@@ -361,15 +347,6 @@ function rowTitle(row: UsageRankingRow): string {
           <select v-model="modelFilter">
             <option value="">{{ t("settings.usage.allModels") }}</option>
             <option v-for="item in facets?.models ?? []" :key="item.id" :value="item.id">
-              {{ item.label }}
-            </option>
-          </select>
-        </label>
-        <label class="usage-filter">
-          <span>{{ t("settings.usage.conversation") }}</span>
-          <select v-model="conversationFilter">
-            <option value="">{{ t("settings.usage.allConversations") }}</option>
-            <option v-for="item in facets?.conversations ?? []" :key="item.id" :value="item.id">
               {{ item.label }}
             </option>
           </select>
@@ -516,7 +493,7 @@ function rowTitle(row: UsageRankingRow): string {
             class="bg-muted/40 text-left text-[10px] uppercase tracking-[0.08em] text-muted-foreground"
           >
             <tr>
-              <th class="px-4 py-3">{{ t("settings.usage.task") }}</th>
+              <th class="px-4 py-3">{{ t("settings.usage.rankingSubject") }}</th>
               <th class="px-3 py-3">{{ t("settings.usage.userAgent") }}</th>
               <th class="px-3 py-3 text-right">{{ t("settings.usage.userInstructions") }}</th>
               <th class="px-3 py-3 text-right">{{ t("settings.usage.modelRequests") }}</th>
@@ -536,18 +513,9 @@ function rowTitle(row: UsageRankingRow): string {
               class="border-t border-border align-top hover:bg-muted/20"
             >
               <td class="max-w-[260px] px-4 py-3">
-                <button
-                  class="max-w-full truncate text-left font-medium"
-                  :class="
-                    rankBy === 'conversation' && row.conversation_id
-                      ? 'hover:text-blue-600 hover:underline dark:hover:text-blue-400'
-                      : ''
-                  "
-                  :disabled="rankBy !== 'conversation' || !row.conversation_id"
-                  @click="openConversation(row)"
-                >
+                <span class="block max-w-full truncate font-medium">
                   {{ rowTitle(row) || t("settings.usage.unknown") }}
-                </button>
+                </span>
                 <div class="mt-1 flex flex-wrap gap-1">
                   <span class="rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
                     {{ row.source_type || t("settings.usage.historical") }}

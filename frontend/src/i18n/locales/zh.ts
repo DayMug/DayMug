@@ -977,7 +977,7 @@ export default {
       day: "日期",
       eyebrowObservability: "用量可观测性",
       introObservability:
-        "区分真实用户指令、模型内部请求、重复上下文读取、模型输出和工具活动。所有筛选条件都会保存在 URL 中。",
+        "展示用户、Agent 和模型的汇总用量。为保护隐私，不展示对话标题、内容或定时任务详情。",
       agent: "Agent",
       provider: "Provider",
       conversation: "会话",
@@ -1032,7 +1032,7 @@ export default {
         conversation: "会话 / 任务排行",
         cron: "定时任务排行",
       },
-      task: "会话 / 任务",
+      rankingSubject: "用户 / Agent / 模型",
       userAgent: "用户 / Agent",
       inputCacheOutput: "输入 / 缓存 / 输出",
       cacheRatio: "缓存占比",

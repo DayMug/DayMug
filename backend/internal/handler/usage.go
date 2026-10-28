@@ -79,18 +79,40 @@ func (h *UsageHandler) insights(c *gin.Context, ownerID, scopeOwnerID string) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "page_size must be a positive integer"})
 		return
 	}
-	result, err := h.Store.QueryUsageInsights(c.Request.Context(), store.UsageInsightsQuery{
+	query := store.UsageInsightsQuery{
 		Start: start, End: end, OwnerID: ownerID, ScopeOwnerID: scopeOwnerID, AgentID: c.Query("agent_id"),
 		Provider: c.Query("provider"), Model: c.Query("model"),
-		ConversationID: c.Query("conversation_id"), SourceType: c.Query("source_type"),
-		GroupBy: c.Query("group_by"), RankBy: c.Query("rank_by"),
+		SourceType: c.Query("source_type"),
+		GroupBy:    c.Query("group_by"), RankBy: c.Query("rank_by"),
 		SortBy: c.Query("sort_by"), SortOrder: c.Query("sort_order"),
 		Page: page, PageSize: pageSize,
-	}, h.Thresholds)
+	}
+	// Usage reporting must never expose individual conversations or task prompts,
+	// even through bookmarked URLs or direct API requests.
+	switch query.GroupBy {
+	case "day", "user", "agent", "model":
+	default:
+		query.GroupBy = "day"
+	}
+	switch query.RankBy {
+	case "user", "agent", "model":
+	default:
+		query.RankBy = "user"
+	}
+	result, err := h.Store.QueryUsageInsights(c.Request.Context(), query, h.Thresholds)
 	if err != nil {
 		respondInternalError(c, "UsageHandler.insights", err)
 		return
 	}
+	// Aggregate store rows carry representative task metadata for internal use.
+	// Strip it from both endpoints, including the admin response.
+	for i := range result.Rankings {
+		row := &result.Rankings[i]
+		row.ConversationID, row.ConversationTitle = "", ""
+		row.CronJobID, row.CronJobName = "", ""
+	}
+	result.Facets.Conversations = []store.UsageFacet{}
+	result.Facets.CronJobs = []store.UsageFacet{}
 	result.Timezone = loc.String()
 	c.JSON(http.StatusOK, result)
 }

@@ -1035,7 +1035,7 @@ export default {
       day: "Day",
       eyebrowObservability: "Usage observability",
       introObservability:
-        "Separate real instructions from provider requests, repeated context reads, model output, and tool activity. Every filter is preserved in the URL.",
+        "View aggregate usage by user, agent, and model. Conversation titles, content, and scheduled task details are kept private.",
       agent: "Agent",
       provider: "Provider",
       conversation: "Conversation",
@@ -1092,7 +1092,7 @@ export default {
         conversation: "Conversations / tasks",
         cron: "Scheduled tasks",
       },
-      task: "Conversation / task",
+      rankingSubject: "User / Agent / Model",
       userAgent: "User / Agent",
       inputCacheOutput: "Input / cache / output",
       cacheRatio: "Cache share",

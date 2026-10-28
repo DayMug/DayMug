@@ -180,13 +180,42 @@ describe("UsageStats", () => {
     expect(adminFetchUsageInsights.mock.calls.at(-1)?.[0]).toMatchObject({ page: 2 });
   });
 
-  it("renders an actionable anomaly and opens its conversation", async () => {
+  it.each([true, false])("keeps conversation details private (admin=%s)", async (isAdmin) => {
+    authMe.value = { is_admin: isAdmin };
     const { wrapper, router } = await mountPage();
     expect(wrapper.get('[data-testid="usage-anomalies"]').text()).toContain("Compact");
-    await wrapper.find("tbody button").trigger("click");
-    await flushPromises();
-    expect(router.currentRoute.value.fullPath).toBe("/chat/agent-1/conv-1");
+    expect(wrapper.text()).toContain("Alice");
+    expect(wrapper.text()).not.toContain("Investigate cache growth");
+    expect(wrapper.html()).not.toContain("conv-1");
+    expect(wrapper.find("tbody button").exists()).toBe(false);
+    expect(wrapper.find('a[href*="/chat/"]').exists()).toBe(false);
+    expect(wrapper.findAll('[role="tab"]').map((tab) => tab.text())).toEqual([
+      "Users",
+      "Agents",
+      "Models",
+    ]);
+    expect(
+      wrapper.findAll("option").some((option) => option.attributes("value") === "conversation"),
+    ).toBe(false);
+    expect(router.currentRoute.value.path).toBe("/settings/usage");
   });
+
+  it.each(["conversation", "cron"])(
+    "normalizes bookmarked private dimensions (%s)",
+    async (rank) => {
+      const { router } = await mountPage(
+        `/settings/usage?conversation_id=conv-1&group_by=conversation&rank_by=${rank}`,
+      );
+      expect(adminFetchUsageInsights.mock.calls[0][0]).toMatchObject({
+        group_by: "day",
+        rank_by: "user",
+      });
+      expect(adminFetchUsageInsights.mock.calls[0][0]).not.toHaveProperty("conversation_id");
+      expect(router.currentRoute.value.query).not.toHaveProperty("conversation_id");
+      expect(router.currentRoute.value.query.group_by).toBe("day");
+      expect(router.currentRoute.value.query.rank_by).toBe("user");
+    },
+  );
 
   it("omits the historical warning and keeps the guided empty state", async () => {
     adminFetchUsageInsights.mockResolvedValueOnce(
