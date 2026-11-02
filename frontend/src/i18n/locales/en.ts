@@ -118,6 +118,7 @@ export default {
     internalTurns: "Internal API turns: {n}",
   },
   rateLimit: {
+    fableWeek: "Fable (7D)",
     usage: "Usage",
     resetsIn: "resets in {remaining} (at {at})",
     updatedAgo: "Updated {age} ago",

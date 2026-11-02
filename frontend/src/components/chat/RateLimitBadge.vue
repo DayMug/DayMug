@@ -1,7 +1,11 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { useI18n } from "vue-i18n";
-import type { RateLimitInfo } from "@/composables/useChat";
+import {
+  RATE_LIMIT_WINDOWS,
+  type RateLimitInfo,
+  type RateLimitWindow,
+} from "@/stores/chatContextStore";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { formatDateTime } from "@/lib/format";
 import { useTimeFormat } from "@/composables/useTimeFormat";
@@ -11,10 +15,9 @@ const { timeHour12 } = useTimeFormat();
 
 const props = defineProps<{
   // Map of window-type → most recently seen rate-limit frame. Empty / no
-  // active window renders nothing. Picks the 5h window when both are
-  // present (it's the one that actually paces typical sessions; 7d is
-  // surfaced via tooltip).
-  rateLimits: Partial<Record<"five_hour" | "seven_day", RateLimitInfo>>;
+  // active window renders nothing. The 5h window paces typical sessions;
+  // weekly and model-specific windows are surfaced in the tooltip.
+  rateLimits: Partial<Record<RateLimitWindow, RateLimitInfo>>;
 }>();
 
 // Tick once per second so the countdown stays live without us having to
@@ -32,24 +35,18 @@ onBeforeUnmount(() => {
   if (timer) window.clearInterval(timer);
 });
 
-// The 5h window is the primary display — short enough to actually matter
-// while you're working. If only 7d has fired this session, fall back to
-// it rather than showing nothing.
-const primary = computed<RateLimitInfo | null>(() => {
-  return props.rateLimits.five_hour ?? props.rateLimits.seven_day ?? null;
-});
+// Keep every supported window in the tooltip, even when the provider only
+// reports the model-specific quota. Prefer the short session window in the badge.
+const windows = computed(() =>
+  RATE_LIMIT_WINDOWS.map((type) => props.rateLimits[type]).filter(
+    (info): info is RateLimitInfo => info !== undefined,
+  ),
+);
+const primary = computed(() => windows.value[0] ?? null);
 
-// secondary is the "other" window when both are present; surfaced in the
-// tooltip only so the badge itself stays a single line.
-const secondary = computed<RateLimitInfo | null>(() => {
-  if (props.rateLimits.five_hour && props.rateLimits.seven_day) {
-    return props.rateLimits.seven_day;
-  }
-  return null;
-});
-
-function windowLabel(t: "five_hour" | "seven_day"): string {
-  return t === "five_hour" ? "5H" : "7D";
+function windowLabel(type: RateLimitWindow): string {
+  if (type === "seven_day_overage_included") return t("rateLimit.fableWeek");
+  return type === "five_hour" ? "5H" : "7D";
 }
 
 // formatRemaining renders the compact "time-left" half of the badge in
@@ -175,16 +172,14 @@ function windowRow(info: RateLimitInfo): WindowRow {
   };
 }
 
-const rows = computed(() =>
-  [primary.value, secondary.value].filter((w): w is RateLimitInfo => w !== null).map(windowRow),
-);
+const rows = computed(() => windows.value.map(windowRow));
 
 // A reading restored from cache (or one from a turn long finished) can be
 // hours old; say so rather than pass it off as live.
 const updatedLine = computed(() => {
-  const observed = [primary.value?.observed_at, secondary.value?.observed_at].filter(
-    (t): t is number => t !== undefined,
-  );
+  const observed = windows.value
+    .map((info) => info.observed_at)
+    .filter((t): t is number => t !== undefined);
   if (observed.length === 0) return "";
   const age = now.value - Math.min(...observed);
   return age >= 60 ? t("rateLimit.updatedAgo", { age: formatLongRemaining(now.value + age) }) : "";

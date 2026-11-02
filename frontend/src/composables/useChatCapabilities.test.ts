@@ -102,6 +102,21 @@ describe("useChatCapabilities", () => {
     expect(hasRateLimitInfo.value).toBe(true);
   });
 
+  it("enables the badge when only Fable's subscription quota is available", () => {
+    mockRegistry.value = makeRegistry(true);
+    const { hasRateLimitInfo } = useChatCapabilities({
+      conversationProvider: ref("claude"),
+      rateLimits: ref({
+        seven_day_overage_included: {
+          type: "seven_day_overage_included",
+          resets_at: 1234567890,
+          utilization: 92,
+        },
+      }),
+    });
+    expect(hasRateLimitInfo.value).toBe(true);
+  });
+
   it("keeps hasRateLimitInfo off until a rate-limit frame has arrived", () => {
     mockRegistry.value = makeRegistry(true);
     const rateLimits = ref<Partial<Record<RateLimitWindow, RateLimitInfo>>>({});

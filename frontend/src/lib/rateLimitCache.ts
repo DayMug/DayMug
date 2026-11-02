@@ -4,7 +4,11 @@
 //
 // Keyed by provider + account: the windows belong to the login, not the
 // conversation, and two accounts of one provider have unrelated quotas.
-import type { RateLimitInfo, RateLimitWindow } from "@/stores/chatContextStore";
+import {
+  RATE_LIMIT_WINDOWS,
+  type RateLimitInfo,
+  type RateLimitWindow,
+} from "@/stores/chatContextStore";
 
 export const RATE_LIMIT_STORAGE_KEY = "daymug-rate-limits-v1";
 
@@ -67,7 +71,7 @@ export function loadCachedRateLimits(
   const entry = loadAll()[cacheKey(provider, account)];
   if (!entry || !isFresh(entry, now)) return {};
   const out: Windows = {};
-  for (const type of ["five_hour", "seven_day"] as const) {
+  for (const type of RATE_LIMIT_WINDOWS) {
     const info = entry.windows?.[type];
     if (info && now < info.resets_at) out[type] = info;
   }

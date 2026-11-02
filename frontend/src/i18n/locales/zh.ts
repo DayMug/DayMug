@@ -111,6 +111,7 @@ export default {
     internalTurns: "内部 API 轮次：{n}",
   },
   rateLimit: {
+    fableWeek: "Fable（7 天）",
     usage: "用量",
     resetsIn: "{remaining}后重置（{at}）",
     updatedAgo: "{age}前更新",

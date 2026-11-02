@@ -16,9 +16,33 @@ describe("rateLimitCache", () => {
     const windows = {
       five_hour: { type: "five_hour" as const, resets_at: NOW + 2 * HOUR, utilization: 40 },
       seven_day: { type: "seven_day" as const, resets_at: NOW + 72 * HOUR, utilization: 9 },
+      seven_day_overage_included: {
+        type: "seven_day_overage_included" as const,
+        resets_at: NOW + 48 * HOUR,
+        utilization: 85,
+      },
     };
     saveCachedRateLimits("claude", "work", windows, NOW);
     expect(loadCachedRateLimits("claude", "work", NOW + HOUR)).toEqual(windows);
+  });
+
+  it("drops an expired Fable window while keeping an active session window", () => {
+    saveCachedRateLimits(
+      "claude",
+      "work",
+      {
+        five_hour: { type: "five_hour", resets_at: NOW + 2 * HOUR },
+        seven_day_overage_included: {
+          type: "seven_day_overage_included",
+          resets_at: NOW + HOUR,
+          utilization: 100,
+        },
+      },
+      NOW,
+    );
+    expect(loadCachedRateLimits("claude", "work", NOW + HOUR)).toEqual({
+      five_hour: { type: "five_hour", resets_at: NOW + 2 * HOUR },
+    });
   });
 
   it("keeps accounts apart", () => {

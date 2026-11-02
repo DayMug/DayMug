@@ -58,7 +58,7 @@ import {
 } from "@/stores/activeConversationStore";
 import { applyConversationActivity } from "@/stores/agentActivityStore";
 import { bumpAttentionVersion } from "@/stores/conversationAttentionStore";
-import { contextUsage, rateLimits } from "@/stores/chatContextStore";
+import { contextUsage, isRateLimitWindow, rateLimits } from "@/stores/chatContextStore";
 import {
   chatMessages,
   knownMessageIds,
@@ -596,7 +596,7 @@ function handleRateLimit(msg: WSJSONStreamFrame) {
   if (!content) return;
   const info = parseWirePayload(msg.type, content, isRateLimitInfo);
   // Windows the badge doesn't render are skipped, not malformed.
-  if (!info || (info.type !== "five_hour" && info.type !== "seven_day")) return;
+  if (!info || !isRateLimitWindow(info.type)) return;
   // A frame with a status is claude's full headline payload — replace, so a
   // flag it now omits (is_using_overage is only sent when true) is cleared.
   // A status-less frame only refreshes usage and reset time, so it keeps the

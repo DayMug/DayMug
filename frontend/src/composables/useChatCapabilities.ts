@@ -31,9 +31,7 @@ export function useChatCapabilities(deps: {
   });
 
   const hasRateLimitInfo = computed(
-    () =>
-      supportsRateLimitEvents.value &&
-      (Boolean(rateLimits.value.five_hour) || Boolean(rateLimits.value.seven_day)),
+    () => supportsRateLimitEvents.value && Object.keys(rateLimits.value).length > 0,
   );
 
   // Context-bar gating stays capability-driven: app-server reports a real

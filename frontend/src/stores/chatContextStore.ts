@@ -38,7 +38,12 @@ export const contextClearedAfterMessageId = ref<string>("");
 // recently seen frame for each window in a single map. lib/rateLimitCache
 // mirrors it per provider+account so a conversation with no turn yet can
 // show the account's last reading.
-export type RateLimitWindow = "five_hour" | "seven_day";
+export const RATE_LIMIT_WINDOWS = ["five_hour", "seven_day", "seven_day_overage_included"] as const;
+export type RateLimitWindow = (typeof RATE_LIMIT_WINDOWS)[number];
+
+export function isRateLimitWindow(type: string): type is RateLimitWindow {
+  return RATE_LIMIT_WINDOWS.some((window) => window === type);
+}
 export type RateLimitInfo = {
   type: RateLimitWindow;
   // Only claude's headline window carries one; codex frames and claude's

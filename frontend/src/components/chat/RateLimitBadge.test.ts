@@ -72,6 +72,61 @@ describe("RateLimitBadge", () => {
     expect(wrapper.text()).toContain("72H:0M/7D");
   });
 
+  it("shows Fable's weekly usage and reset alongside the aggregate windows", () => {
+    const passthrough = { template: "<div><slot /></div>" };
+    const wrapper = mount(RateLimitBadge, {
+      props: {
+        rateLimits: {
+          five_hour: fiveHour({ utilization: 9 }),
+          seven_day: sevenDay({ utilization: 92 }),
+          seven_day_overage_included: sevenDay({
+            type: "seven_day_overage_included",
+            utilization: 85,
+            status: undefined,
+          }),
+        },
+      },
+      global: {
+        stubs: {
+          TooltipProvider: passthrough,
+          Tooltip: passthrough,
+          TooltipTrigger: passthrough,
+          TooltipContent: passthrough,
+        },
+      },
+    });
+    const rows = wrapper.findAll('[data-testid="rate-limit-row"]');
+    expect(rows).toHaveLength(3);
+    expect(rows[2].text()).toContain("Fable (7D)");
+    expect(rows[2].text()).toContain("resets in 3d 0h");
+    const fill = rows[2].get('[data-testid="rate-limit-usage-bar"] > div');
+    expect(fill.attributes("style")).toContain("width: 85%");
+    expect(fill.classes()).toContain("bg-amber-400");
+    expect(wrapper.get('[data-testid="rate-limit-label"]').text()).toBe("1H:30M/5H");
+    expect(wrapper.get('[data-testid="rate-limit-badge"]').attributes("aria-label")).toContain(
+      "Fable (7D): 85% used, resets in 3d 0h",
+    );
+  });
+
+  it("shows a blocked Fable window even before aggregate windows arrive", () => {
+    const wrapper = mount(RateLimitBadge, {
+      props: {
+        rateLimits: {
+          seven_day_overage_included: sevenDay({
+            type: "seven_day_overage_included",
+            status: "rejected",
+            utilization: 100,
+          }),
+        },
+      },
+    });
+    expect(wrapper.text()).toContain("72H:0M/Fable (7D)");
+    expect(wrapper.get('[data-testid="rate-limit-badge"]').classes()).toContain("text-destructive");
+    expect(wrapper.get('[data-testid="rate-limit-badge"]').attributes("aria-label")).toContain(
+      "limit reached",
+    );
+  });
+
   it("uses the warning tone when status is warning", () => {
     const wrapper = mount(RateLimitBadge, {
       props: { rateLimits: { five_hour: fiveHour({ status: "warning" }) } },
@@ -120,6 +175,7 @@ describe("RateLimitBadge", () => {
         rateLimits: {
           five_hour: fiveHour({ utilization: 38, observed_at: NOW_SECONDS - 25 * 60 }),
           seven_day: sevenDay({ status: undefined }),
+          seven_day_overage_included: sevenDay({ type: "seven_day_overage_included" }),
         },
       },
       global: {
@@ -133,6 +189,7 @@ describe("RateLimitBadge", () => {
     });
     const text = wrapper.text();
     expect(text).toContain("用量");
+    expect(text).toContain("Fable（7 天）");
     expect(text).toMatch(/1 小时 30 分后重置（2023\/11\/1\d.+） · 未超限/);
     expect(text).toContain("3 天 0 小时后重置");
     expect(text).toContain("25 分 0 秒前更新");

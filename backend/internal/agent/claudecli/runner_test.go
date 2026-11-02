@@ -794,6 +794,39 @@ func TestParseStreamLine_RateLimitEvent_UnifiedWindows(t *testing.T) {
 	}
 }
 
+// Fable uses a separate weekly subscription bucket. It must survive both
+// the unified-window report and a headline event when it becomes limiting.
+func TestParseStreamLine_RateLimitEvent_Fable(t *testing.T) {
+	for _, headline := range []string{"five_hour", "seven_day_overage_included"} {
+		t.Run(headline, func(t *testing.T) {
+			line := `{"type":"rate_limit_event","rate_limit_info":{"status":"allowed_warning","resetsAt":1791572400,"rateLimitType":"` + headline + `","unifiedWindows":{"seven_day_overage_included":{"utilization":0.92,"resetsAt":1791572400}}}}`
+			var fable map[string]any
+			for _, event := range ParseStreamLine([]byte(line)) {
+				var payload map[string]any
+				if err := json.Unmarshal([]byte(event.Content), &payload); err != nil {
+					t.Fatal(err)
+				}
+				if payload["type"] == "seven_day_overage_included" {
+					if fable != nil {
+						t.Fatal("duplicate Fable window")
+					}
+					fable = payload
+				}
+			}
+			if fable["utilization"] != float64(92) || fable["resets_at"] != float64(1791572400) {
+				t.Fatalf("Fable window = %v", fable)
+			}
+			if headline == "seven_day_overage_included" {
+				if fable["status"] != "allowed_warning" {
+					t.Fatalf("headline Fable status = %v", fable["status"])
+				}
+			} else if _, ok := fable["status"]; ok {
+				t.Fatal("secondary Fable window must not inherit headline status")
+			}
+		})
+	}
+}
+
 func TestParseStreamLine_RateLimitEvent_DropsIncomplete(t *testing.T) {
 	// Missing rateLimitType — can't be attributed to a window, drop it.
 	noType := `{"type":"rate_limit_event","rate_limit_info":{"status":"allowed","resetsAt":1778940000}}`

@@ -216,7 +216,7 @@ async function switchToConversation(id: string) {
     conversationAccount.value = conv.account_name ?? "";
     // A live frame may already have landed while the fetch was in flight;
     // it is newer than anything cached.
-    if (!rateLimits.value.five_hour && !rateLimits.value.seven_day) {
+    if (Object.keys(rateLimits.value).length === 0) {
       rateLimits.value = loadCachedRateLimits(conv.provider, conv.account_name ?? "");
     }
     // If the latest page is full, there's almost certainly older history

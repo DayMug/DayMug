@@ -742,6 +742,31 @@ describe("rate_limit", () => {
     expect(rateLimits.value.seven_day).toMatchObject({ status: "allowed" });
   });
 
+  it("retains Fable usage updates and preserves the last reported status", () => {
+    dispatch({
+      type: "rate_limit",
+      content: JSON.stringify({
+        type: "seven_day_overage_included",
+        status: "allowed_warning",
+        utilization: 80,
+        resets_at: 2000,
+      }),
+    });
+    dispatch({
+      type: "rate_limit",
+      content: JSON.stringify({
+        type: "seven_day_overage_included",
+        utilization: 92,
+        resets_at: 2000,
+      }),
+    });
+    expect(rateLimits.value.seven_day_overage_included).toMatchObject({
+      status: "allowed_warning",
+      utilization: 92,
+      resets_at: 2000,
+    });
+  });
+
   it("keeps the server's observed_at and ignores a replay older than what it holds", () => {
     dispatch({
       type: "rate_limit",
