@@ -102,7 +102,8 @@ describe("RateLimitBadge", () => {
     const fill = rows[2].get('[data-testid="rate-limit-usage-bar"] > div');
     expect(fill.attributes("style")).toContain("width: 85%");
     expect(fill.classes()).toContain("bg-amber-400");
-    expect(wrapper.get('[data-testid="rate-limit-label"]').text()).toBe("1H:30M/5H");
+    // The nearly spent weekly window is the constraint, not the idle 5h one.
+    expect(wrapper.get('[data-testid="rate-limit-label"]').text()).toBe("72H:0M/7D");
     expect(wrapper.get('[data-testid="rate-limit-badge"]').attributes("aria-label")).toContain(
       "Fable (7D): 85% used, resets in 3d 0h",
     );
@@ -124,6 +125,48 @@ describe("RateLimitBadge", () => {
     expect(wrapper.get('[data-testid="rate-limit-badge"]').classes()).toContain("text-destructive");
     expect(wrapper.get('[data-testid="rate-limit-badge"]').attributes("aria-label")).toContain(
       "limit reached",
+    );
+  });
+
+  // The frame claude emits once Fable runs out: Fable is the headline window
+  // with a rejected status while the 5h window is nearly untouched.
+  it("puts a blocked Fable window in the badge over a healthy 5h window", () => {
+    const wrapper = mount(RateLimitBadge, {
+      props: {
+        rateLimits: {
+          five_hour: fiveHour({ status: undefined, utilization: 3 }),
+          seven_day: sevenDay({ status: undefined, utilization: 50 }),
+          seven_day_overage_included: sevenDay({
+            type: "seven_day_overage_included",
+            status: "rejected",
+            utilization: 100,
+          }),
+        },
+      },
+    });
+    expect(wrapper.get('[data-testid="rate-limit-label"]').text()).toBe("72H:0M/Fable (7D)");
+    expect(wrapper.get('[data-testid="rate-limit-badge"]').classes()).toContain("text-destructive");
+    expect(wrapper.get('[data-testid="rate-limit-label"]').classes()).not.toContain(
+      "@max-sm:hidden",
+    );
+  });
+
+  it("does not let spent Fable usage without a status take over the badge", () => {
+    const wrapper = mount(RateLimitBadge, {
+      props: {
+        rateLimits: {
+          five_hour: fiveHour({ utilization: 3 }),
+          seven_day_overage_included: sevenDay({
+            type: "seven_day_overage_included",
+            status: undefined,
+            utilization: 100,
+          }),
+        },
+      },
+    });
+    expect(wrapper.get('[data-testid="rate-limit-label"]').text()).toBe("1H:30M/5H");
+    expect(wrapper.get('[data-testid="rate-limit-badge"]').classes()).toContain(
+      "text-muted-foreground",
     );
   });
 

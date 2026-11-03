@@ -36,13 +36,37 @@ onBeforeUnmount(() => {
 });
 
 // Keep every supported window in the tooltip, even when the provider only
-// reports the model-specific quota. Prefer the short session window in the badge.
+// reports the model-specific quota.
 const windows = computed(() =>
   RATE_LIMIT_WINDOWS.map((type) => props.rateLimits[type]).filter(
     (info): info is RateLimitInfo => info !== undefined,
   ),
 );
-const primary = computed(() => windows.value[0] ?? null);
+
+// severity ranks how close a window is to stopping work: 2 denied, 1 warning,
+// 0 healthy. A status is the provider naming the window that limits the
+// current request, so it counts for any window. Spent usage alone only counts
+// for the windows every model draws from — a used-up Fable quota says nothing
+// about an Opus turn.
+function severity(info: RateLimitInfo): number {
+  const s = info.status?.toLowerCase() ?? "";
+  if (s === "blocked" || s === "rejected") return 2;
+  if (s === "warning" || s === "allowed_warning") return 1;
+  if (info.type === "seven_day_overage_included" || info.utilization === undefined) return 0;
+  if (info.utilization >= 100) return 2;
+  if (info.utilization >= 80) return 1;
+  return 0;
+}
+
+// The badge shows the most constraining window, so an exhausted weekly or
+// Fable quota isn't hidden behind a healthy 5h countdown. Ties keep the short
+// session window, which paces typical sessions.
+const primary = computed(() =>
+  windows.value.reduce<RateLimitInfo | null>(
+    (best, info) => (best === null || severity(info) > severity(best) ? info : best),
+    null,
+  ),
+);
 
 function windowLabel(type: RateLimitWindow): string {
   if (type === "seven_day_overage_included") return t("rateLimit.fableWeek");
@@ -119,12 +143,9 @@ function usedPercent(info: RateLimitInfo): number | null {
 // so an unknown future status doesn't break the layout. Codex frames carry
 // no status, so there the usage percentage decides.
 const tone = computed(() => {
-  const s = primary.value?.status?.toLowerCase() ?? "";
-  if (s === "blocked" || s === "rejected") return "danger";
-  if (s === "warning" || s === "allowed_warning") return "warning";
-  const used = primary.value?.utilization;
-  if (used !== undefined && used >= 100) return "danger";
-  if (used !== undefined && used >= 80) return "warning";
+  const level = primary.value ? severity(primary.value) : 0;
+  if (level === 2) return "danger";
+  if (level === 1) return "warning";
   return "ok";
 });
 
