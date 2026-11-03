@@ -30,7 +30,7 @@ const deleteError = ref("");
 
 // The detail editor uses one persistent form split into focused tab panels.
 // v-show keeps each panel mounted, so switching tabs never discards edits.
-const activeTab = ref<1 | 2 | 3>(1);
+const activeTab = ref<1 | 2 | 3 | 4>(1);
 
 const userObj = computed(() => {
   const id = route.params.id as string;
@@ -48,6 +48,7 @@ const initialData = computed<UserFormData | undefined>(() => {
     default_model: user.default_model ?? "",
     think_level: user.think_level ?? "",
     case_mode: user.case_mode ?? false,
+    env: user.env ?? "",
     mcp_config: user.mcp_config,
     claude_md_content: user.claude_md_content,
     manage_claude_md: user.manage_claude_md,
@@ -92,6 +93,7 @@ async function onSubmit(data: UserFormData) {
       default_model: data.default_model,
       think_level: data.think_level,
       case_mode: data.case_mode,
+      env: data.env,
       mcp_config: data.mcp_config,
       claude_md_content: data.claude_md_content,
       manage_claude_md: data.manage_claude_md,
@@ -207,6 +209,7 @@ async function confirmDelete() {
             t('settings.agentForm.basic'),
             t('settings.agentForm.rolePersona'),
             t('settings.agentForm.integrations'),
+            t('settings.rows.advanced'),
           ]"
           :id="`form-tab-${i + 1}`"
           :key="i"
@@ -216,15 +219,17 @@ async function confirmDelete() {
           :aria-controls="`form-panel-${i + 1}`"
           class="tab-anchor flex items-baseline gap-2 px-3 sm:px-4 py-3 text-[13px] cursor-pointer transition-colors whitespace-nowrap shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
           :class="
-            activeTab === ((i + 1) as 1 | 2 | 3)
+            activeTab === ((i + 1) as 1 | 2 | 3 | 4)
               ? 'font-semibold text-foreground border-b-2 border-foreground -mb-px'
               : 'text-muted-foreground hover:text-foreground border-b-2 border-transparent -mb-px'
           "
-          @click="activeTab = (i + 1) as 1 | 2 | 3"
+          @click="activeTab = (i + 1) as 1 | 2 | 3 | 4"
         >
           <span
             class="font-mono text-[11px]"
-            :class="activeTab === ((i + 1) as 1 | 2 | 3) ? 'text-primary' : 'text-[var(--ink-5)]'"
+            :class="
+              activeTab === ((i + 1) as 1 | 2 | 3 | 4) ? 'text-primary' : 'text-[var(--ink-5)]'
+            "
             >{{ String(i + 1).padStart(2, "0") }}</span
           >
           <span>{{ label }}</span>

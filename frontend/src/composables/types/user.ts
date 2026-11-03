@@ -111,6 +111,7 @@ export interface CreateUserData {
 }
 
 export interface UpdateUserData {
+  env?: string;
   name: string;
   work_dir: string;
   avatar: string;

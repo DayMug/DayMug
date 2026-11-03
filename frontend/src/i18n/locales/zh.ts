@@ -1254,6 +1254,9 @@ export default {
       pricingNegativeError: "单价不能为负数。",
     },
     agentForm: {
+      environmentHelp: "每行填写一个 VAR=VAL，为此智能体配置环境变量。",
+      environmentPrecedence:
+        "默认继承你的环境变量。这里的同名变量会覆盖用户和 Provider 配置；留空则全部继承。修改将在后续运行中生效。",
       basic: "基础信息",
       basicSub: "设置智能体身份与工作目录。",
       displayName: "显示名称",

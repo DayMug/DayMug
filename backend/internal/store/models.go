@@ -85,7 +85,7 @@ type User struct {
 	Avatar         string `json:"avatar"`
 	RoleDefinition string `json:"role_definition"`
 	// Env is the user's newline-delimited VAR=VAL configuration layered onto
-	// every agent child process. Agents inherit their owner's row at runtime.
+	// every agent child process. Agent values override their owner's at runtime.
 	Env             string `json:"env"`
 	McpConfig       string `json:"mcp_config"`
 	ClaudeMdContent string `json:"claude_md_content"`

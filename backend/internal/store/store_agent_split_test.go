@@ -214,3 +214,35 @@ func TestListUsers_ScansArchivedAgent(t *testing.T) {
 		t.Fatalf("archived agent missing or not archived in %+v", users)
 	}
 }
+
+func TestSetUserEnv_MigratedAgentSkipsDeletedLegacyRow(t *testing.T) {
+	t.Parallel()
+	s := newTestStore(t)
+	ctx := context.Background()
+	if err := s.CreateUser(ctx, User{ID: "owner", Username: "alice", Name: "Alice"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.CreateUser(ctx, User{ID: "agent", OwnerID: "owner", Name: "Agent"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.db.Exec("INSERT INTO users (id, name, env, deleted_at) VALUES ('agent', 'Legacy', 'TOKEN=old', datetime('now'))"); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SetUserEnv(ctx, "agent", "TOKEN=new"); err != nil {
+		t.Fatal(err)
+	}
+	got, err := s.GetUser(ctx, "agent")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Env != "TOKEN=new" {
+		t.Fatalf("agent env = %q", got.Env)
+	}
+	var legacyEnv string
+	if err := s.db.QueryRow("SELECT env FROM users WHERE id = 'agent'").Scan(&legacyEnv); err != nil {
+		t.Fatal(err)
+	}
+	if legacyEnv != "TOKEN=old" {
+		t.Fatalf("deleted legacy row changed: %q", legacyEnv)
+	}
+}

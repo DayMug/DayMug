@@ -91,12 +91,12 @@ describe("UserEdit", () => {
     const wrapper = mount(UserEdit, { global: { plugins: [router] } });
 
     const tabs = wrapper.findAll('[role="tab"]');
-    expect(tabs).toHaveLength(3);
+    expect(tabs).toHaveLength(4);
     expect(tabs[0].attributes("aria-selected")).toBe("true");
     expect(wrapper.find('[data-form-panel="1"]').attributes("style")).toBeUndefined();
     expect(wrapper.find('[data-form-panel="2"]').attributes("style")).toContain("display: none");
     expect(wrapper.find('[data-form-panel="3"]').attributes("style")).toContain("display: none");
-    expect(wrapper.find('[data-form-panel="4"]').exists()).toBe(false);
+    expect(wrapper.find('[data-form-panel="4"]').attributes("style")).toContain("display: none");
   });
 
   it("keeps the horizontal tab strip from showing a vertical scrollbar", async () => {
@@ -123,6 +123,34 @@ describe("UserEdit", () => {
     expect((nameInput.element as HTMLInputElement).value).toBe("Alice Updated");
   });
 
+  it("loads, preserves across tabs, saves and clears Agent environment overrides", async () => {
+    mockUsers.value = [makeAgent({ env: "SHARED=agent" })];
+    // Keep the editor mounted after the first save to exercise clearing too.
+    mockUpdateUser.mockResolvedValue({ ok: false, error: "retry" });
+    const router = makeRouter();
+    await router.isReady();
+    const wrapper = mount(UserEdit, { global: { plugins: [router] } });
+    const tabs = wrapper.findAll('[role="tab"]');
+    await tabs[3].trigger("click");
+    expect(wrapper.find('[data-form-panel="4"]').isVisible()).toBe(true);
+    const editor = wrapper.get("#agent-environment");
+    expect((editor.element as HTMLTextAreaElement).value).toBe("SHARED=agent");
+    await editor.setValue("SHARED=override\nEMPTY=");
+    await tabs[0].trigger("click");
+    await tabs[3].trigger("click");
+    expect((editor.element as HTMLTextAreaElement).value).toBe("SHARED=override\nEMPTY=");
+    const save = wrapper.findAll("button").find((b) => b.text() === "Save")!;
+    await save.trigger("click");
+    await flushPromises();
+    expect(mockUpdateUser).toHaveBeenLastCalledWith(
+      "u1",
+      expect.objectContaining({ env: "SHARED=override\nEMPTY=" }),
+    );
+    await editor.setValue("");
+    await save.trigger("click");
+    expect(mockUpdateUser).toHaveBeenLastCalledWith("u1", expect.objectContaining({ env: "" }));
+  });
+
   it("loads user data into form", async () => {
     const router = makeRouter();
     await router.isReady();
@@ -147,6 +175,7 @@ describe("UserEdit", () => {
       default_model: "",
       think_level: "",
       case_mode: false,
+      env: "",
       mcp_config: "",
       claude_md_content: "",
       manage_claude_md: false,
@@ -385,14 +414,14 @@ describe("UserEdit", () => {
     );
   });
 
-  it("does not expose the retired Advanced tab or editors", async () => {
+  it("shows Advanced without the retired MCP and CLAUDE.md editors", async () => {
     const router = makeRouter();
     await router.isReady();
     const wrapper = mount(UserEdit, { global: { plugins: [router] } });
 
     const tabs = wrapper.findAll('[role="tab"]');
-    expect(tabs).toHaveLength(3);
-    expect(tabs.some((tab) => tab.text().includes("Advanced"))).toBe(false);
+    expect(tabs).toHaveLength(4);
+    expect(tabs.some((tab) => tab.text().includes("Advanced"))).toBe(true);
     expect(wrapper.find("textarea.mcp-editor").exists()).toBe(false);
     expect(wrapper.text()).not.toContain("CLAUDE.md");
   });

@@ -9,6 +9,7 @@ import (
 
 	"github.com/DayMug/DayMug/backend/internal/config"
 	"github.com/DayMug/DayMug/backend/internal/store"
+	"github.com/DayMug/DayMug/backend/internal/userenv"
 )
 
 // UserOps owns the agent-row write use-cases behind /api/users — create,
@@ -37,6 +38,8 @@ type UserOps struct {
 // request body: binding tags, and therefore the wire format, stay at the
 // transport boundary and the handler maps field by field.
 type AgentParams struct {
+	// Nil preserves existing overrides on update; an empty value clears them.
+	Env             *string
 	Name            string
 	WorkDir         string
 	Avatar          string
@@ -202,6 +205,13 @@ func (o *UserOps) CreateAgent(ctx context.Context, p AgentParams, creatorUID str
 	if err != nil {
 		return store.User{}, err
 	}
+	env := ""
+	if p.Env != nil {
+		env = strings.TrimSpace(*p.Env)
+		if _, err := userenv.Parse(env); err != nil {
+			return store.User{}, BadRequest(err.Error())
+		}
+	}
 	// Agents inherit the human owner's filesystem reach. Refuse to create one
 	// whose work_dir escapes the caller's own home, otherwise the resulting
 	// agent process would have access we never granted.
@@ -224,6 +234,7 @@ func (o *UserOps) CreateAgent(ctx context.Context, p AgentParams, creatorUID str
 
 	user := store.User{
 		ID:              uuid.New().String(),
+		Env:             env,
 		Name:            p.Name,
 		OwnerID:         ownerID,
 		WorkDir:         p.WorkDir,
@@ -271,6 +282,13 @@ func (o *UserOps) UpdateAgent(ctx context.Context, target store.User, p AgentPar
 	if err != nil {
 		return store.User{}, err
 	}
+	env := target.Env
+	if isAgent && p.Env != nil {
+		env = strings.TrimSpace(*p.Env)
+		if _, err := userenv.Parse(env); err != nil {
+			return store.User{}, BadRequest(err.Error())
+		}
+	}
 	// Only enforce the home-jail when the agent's work_dir actually changes.
 	// Older rows created before this check landed may sit outside the caller's
 	// home; we shouldn't block name/persona edits on those just because the
@@ -302,6 +320,11 @@ func (o *UserOps) UpdateAgent(ctx context.Context, target store.User, p AgentPar
 
 	if err := o.Store.UpdateUser(ctx, user); err != nil {
 		return store.User{}, StoreError(err, "user not found")
+	}
+	if isAgent && p.Env != nil {
+		if err := o.Store.SetUserEnv(ctx, target.ID, env); err != nil {
+			return store.User{}, StoreError(err, "user not found")
+		}
 	}
 	if workDirChanged {
 		if err := o.Store.SetUserWorkDir(ctx, target.ID, p.WorkDir); err != nil {
@@ -358,6 +381,7 @@ func (o *UserOps) DuplicateAgent(ctx context.Context, src store.User, authedUID 
 		// doesn't silently re-home the copy under the admin — the duplicate
 		// stays owned by the same human as the source.
 		OwnerID:         src.OwnerID,
+		Env:             src.Env,
 		WorkDir:         src.WorkDir,
 		Avatar:          src.Avatar,
 		RoleDefinition:  src.RoleDefinition,

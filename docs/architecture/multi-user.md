@@ -34,6 +34,8 @@ The same pool gates all four provider types (`claude` / `codex` / `claude-compat
 
 Each human configures newline-delimited `VAR=VAL` entries from Settings → Advanced. The values are stored on the human row, inherited by every owned agent, and override same-name provider-account env values at process launch. Admin user-management endpoints neither accept nor expose this field.
 
+Agent editing has its own Advanced tab for newline-delimited overrides stored on the Agent row. Each run layers provider-account values, then the owning human's values, then the Agent's values; the last matching key wins. An empty Agent field inherits everything, while `KEY=` overrides that key with an empty value. Changes apply to subsequent runs in both browser chat and attached IM bots. Saving an Agent without an `env` field preserves its existing overrides; duplicating an Agent copies them.
+
 ## Sandbox
 
 `agent.Sandbox` (file: `agent/sandbox.go`) is the seam that wraps each backend invocation in an isolation layer. Two implementations ship: the no-op pass-through (default) and `bwrap` (`sandbox.type: bwrap`, see [Configuration](../guides/configuration.md)). With the no-op the spawned CLI inherits whatever filesystem reach the server user has — `safePath()` only governs the HTTP API — so treat the server as single-tenant (or front it with container-level isolation) unless bwrap is enabled.

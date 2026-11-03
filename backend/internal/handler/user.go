@@ -46,22 +46,24 @@ func (h *UserHandler) ops() *service.UserOps {
 // are deliberately absent here — they live on the human owner now and are
 // managed via /api/auth/notifications, not per-agent.
 type userRequest struct {
-	Name            string `json:"name"`
-	WorkDir         string `json:"work_dir"`
-	Avatar          string `json:"avatar"`
-	RoleDefinition  string `json:"role_definition"`
-	McpConfig       string `json:"mcp_config"`
-	ClaudeMdContent string `json:"claude_md_content"`
-	ManageClaudeMd  bool   `json:"manage_claude_md"`
-	DefaultModel    string `json:"default_model"`
-	ThinkLevel      string `json:"think_level"`
-	CaseMode        bool   `json:"case_mode"`
+	Env             *string `json:"env"`
+	Name            string  `json:"name"`
+	WorkDir         string  `json:"work_dir"`
+	Avatar          string  `json:"avatar"`
+	RoleDefinition  string  `json:"role_definition"`
+	McpConfig       string  `json:"mcp_config"`
+	ClaudeMdContent string  `json:"claude_md_content"`
+	ManageClaudeMd  bool    `json:"manage_claude_md"`
+	DefaultModel    string  `json:"default_model"`
+	ThinkLevel      string  `json:"think_level"`
+	CaseMode        bool    `json:"case_mode"`
 }
 
 // params maps the wire body onto the service-side field set. The JSON tags stay
 // on userRequest so the transport format is owned by this layer alone.
 func (req userRequest) params() service.AgentParams {
 	return service.AgentParams{
+		Env:             req.Env,
 		Name:            req.Name,
 		WorkDir:         req.WorkDir,
 		Avatar:          req.Avatar,

@@ -31,6 +31,7 @@ export interface UserFormData {
   default_model?: string;
   think_level?: string;
   case_mode?: boolean;
+  env?: string;
   mcp_config: string;
   claude_md_content: string;
   manage_claude_md: boolean;
@@ -41,7 +42,7 @@ const props = withDefaults(
     mode: "add" | "edit";
     initialData?: UserFormData;
     submitting?: boolean;
-    activeSection?: 1 | 2 | 3;
+    activeSection?: 1 | 2 | 3 | 4;
   }>(),
   { submitting: false, initialData: undefined, activeSection: undefined },
 );
@@ -62,6 +63,7 @@ const defaultModel = ref("");
 // default-model profile.
 const persistedThinkLevel = ref("");
 const caseMode = ref(false);
+const env = ref("");
 const mcpConfig = ref("");
 const claudeMdContent = ref("");
 const manageClaudeMd = ref(false);
@@ -97,6 +99,7 @@ function loadData(data: UserFormData) {
   defaultModel.value = data.default_model || "";
   persistedThinkLevel.value = data.think_level || "";
   caseMode.value = data.case_mode ?? false;
+  env.value = data.env ?? "";
   mcpConfig.value = data.mcp_config;
   claudeMdContent.value = data.claude_md_content;
   manageClaudeMd.value = data.manage_claude_md;
@@ -123,6 +126,7 @@ function handleSubmit() {
     default_model: defaultModel.value.trim(),
     think_level: persistedThinkLevel.value,
     case_mode: caseMode.value,
+    env: env.value.trim(),
     mcp_config: mcpConfig.value.trim(),
     claude_md_content: claudeMdContent.value.trim(),
     manage_claude_md: manageClaudeMd.value,
@@ -272,6 +276,43 @@ watch(
     >
       <slot name="integrations"></slot>
     </div>
+
+    <section
+      v-if="mode === 'edit'"
+      v-show="!activeSection || activeSection === 4"
+      id="form-panel-4"
+      class="form-section"
+      data-form-panel="4"
+      :role="activeSection ? 'tabpanel' : undefined"
+      :aria-labelledby="activeSection ? 'form-tab-4' : undefined"
+    >
+      <header class="form-section-head">
+        <div class="form-section-roman">IV.</div>
+        <div class="form-section-title">{{ t("settings.rows.advanced") }}</div>
+        <div class="form-section-sub">{{ t("settings.agentForm.environmentHelp") }}</div>
+      </header>
+      <div class="form-section-body">
+        <div>
+          <label for="agent-environment" class="field-label">{{
+            t("settings.advanced.environment")
+          }}</label>
+          <Textarea
+            id="agent-environment"
+            v-model="env"
+            :rows="10"
+            wrap="off"
+            spellcheck="false"
+            autocomplete="off"
+            :disabled="submitting"
+            :placeholder="t('settings.advanced.placeholder')"
+            class="resize-y font-mono text-[13px]"
+          />
+          <p class="mt-1.5 text-[11px] leading-relaxed text-muted-foreground">
+            {{ t("settings.agentForm.environmentPrecedence") }}
+          </p>
+        </div>
+      </div>
+    </section>
 
     <div class="flex items-center gap-2.5 mt-7">
       <Button :disabled="!isValid || submitting" @click="handleSubmit">

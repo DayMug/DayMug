@@ -1195,3 +1195,91 @@ func TestUpdateKeepsBotPlatformsOnTheResponse(t *testing.T) {
 		t.Fatalf("bot_platforms = %v, want [telegram]", updated.BotPlatforms)
 	}
 }
+
+func TestUser_AgentEnvironmentRoundTrip(t *testing.T) {
+	s, err := store.NewSQLiteStore(filepath.Join(t.TempDir(), "daymug.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = s.Close() })
+	if err := s.Init(); err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	home := t.TempDir()
+	if err := s.CreateUser(ctx, store.User{ID: "owner", Username: "alice", Name: "Alice", WorkDir: home, Env: "TOKEN=owner"}); err != nil {
+		t.Fatal(err)
+	}
+	r := gin.New()
+	r.Use(func(c *gin.Context) { c.Set("auth_user_id", "owner"); c.Next() })
+	h := NewUserHandler(s)
+	r.POST("/api/users", h.Create)
+	r.PUT("/api/users/:id", h.Update)
+	send := func(method, path string, body map[string]any) *httptest.ResponseRecorder {
+		t.Helper()
+		data, err := json.Marshal(body)
+		if err != nil {
+			t.Fatal(err)
+		}
+		req := httptest.NewRequest(method, path, bytes.NewReader(data))
+		req.Header.Set("Content-Type", "application/json")
+		rec := httptest.NewRecorder()
+		r.ServeHTTP(rec, req)
+		return rec
+	}
+	rec := send("POST", "/api/users", map[string]any{"name": "Agent", "work_dir": home, "env": "TOKEN=initial"})
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create: %d %s", rec.Code, rec.Body.String())
+	}
+	var created store.User
+	if err := json.Unmarshal(rec.Body.Bytes(), &created); err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		name   string
+		env    any
+		want   string
+		status int
+	}{
+		{"set", "TOKEN=agent\nEMPTY=", "TOKEN=agent\nEMPTY=", http.StatusOK},
+		{"omitted", nil, "TOKEN=agent\nEMPTY=", http.StatusOK},
+		{"invalid", "invalid-line", "TOKEN=agent\nEMPTY=", http.StatusBadRequest},
+		{"clear", "", "", http.StatusOK},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			body := map[string]any{"name": "Agent", "work_dir": home}
+			if tc.env != nil {
+				body["env"] = tc.env
+			}
+			rec := send("PUT", "/api/users/"+created.ID, body)
+			if rec.Code != tc.status {
+				t.Fatalf("update: %d %s", rec.Code, rec.Body.String())
+			}
+			row, err := s.GetUser(ctx, created.ID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if row.Env != tc.want {
+				t.Fatalf("env = %q, want %q", row.Env, tc.want)
+			}
+			if tc.status == http.StatusOK {
+				var response store.User
+				if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
+					t.Fatal(err)
+				}
+				if response.Env != tc.want {
+					t.Fatalf("response env = %q", response.Env)
+				}
+			}
+		})
+	}
+	// Agent edits cannot overwrite the human's self-service environment.
+	rec = send("PUT", "/api/users/owner", map[string]any{"name": "Alice", "env": "TOKEN=changed"})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("human edit: %d %s", rec.Code, rec.Body.String())
+	}
+	owner, err := s.GetUser(ctx, "owner")
+	if err != nil || owner.Env != "TOKEN=owner" {
+		t.Fatalf("owner environment changed: %q, %v", owner.Env, err)
+	}
+}

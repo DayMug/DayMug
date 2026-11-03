@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -140,12 +141,11 @@ func TestPrepareRunSession(t *testing.T) {
 }
 
 // Every run inherits its owner's self-service environment on top of the
-// account's, whichever transport builds the request — the agent row's own
-// stored copy may be stale.
+// account's, whichever transport builds the request.
 func TestNewOneshotRunRequestUsesOwnerEnvironment(t *testing.T) {
 	ms := storetest.New()
 	owner := store.User{ID: "human1", Username: "alice", Email: "alice@example.com", Env: "GH_TOKEN=owner-token"}
-	agentRow := store.User{ID: "agent1", OwnerID: "human1", Email: "alice@example.com", Env: "GH_TOKEN=stale"}
+	agentRow := store.User{ID: "agent1", OwnerID: "human1", Email: "alice@example.com", Env: ""}
 	ms.Users = []store.User{owner, agentRow}
 	account := &config.Provider{Name: "acc1", Type: config.CLITypeClaude, Env: map[string]string{
 		"GH_TOKEN": "account-token", "ANTHROPIC_BASE_URL": "https://example.invalid",
@@ -155,7 +155,7 @@ func TestNewOneshotRunRequestUsesOwnerEnvironment(t *testing.T) {
 	defer cleanup()
 
 	if got := opts.AccountEnv["GH_TOKEN"]; got != "owner-token" {
-		t.Fatalf("GH_TOKEN = %q, want the owner's value over the account's and the stale row's", got)
+		t.Fatalf("GH_TOKEN = %q, want the owner's value over the account's", got)
 	}
 	if got := opts.AccountEnv["ANTHROPIC_BASE_URL"]; got != "https://example.invalid" {
 		t.Fatalf("account env lost: ANTHROPIC_BASE_URL = %q", got)
@@ -212,5 +212,34 @@ func TestNewOneshotRunRequestUserEnvOverridesProviderEnv(t *testing.T) {
 	}
 	if got := opts.AccountEnv["PROVIDER_ONLY"]; got != "kept" {
 		t.Fatalf("PROVIDER_ONLY = %q, want kept", got)
+	}
+}
+
+func TestNewOneshotRunRequestAgentEnvironmentOverridesOwner(t *testing.T) {
+	ms, err := store.NewSQLiteStore(filepath.Join(t.TempDir(), "daymug.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = ms.Close() })
+	if err := ms.Init(); err != nil {
+		t.Fatal(err)
+	}
+	owner := store.User{ID: "owner", Username: "alice", Env: "SHARED=owner\nOWNER_ONLY=kept\nEMPTY=owner"}
+	row := store.User{ID: "agent", OwnerID: "owner", Env: "SHARED=agent\nEMPTY=\nAGENT_ONLY=added"}
+	for _, user := range []store.User{owner, row} {
+		if err := ms.CreateUser(context.Background(), user); err != nil {
+			t.Fatal(err)
+		}
+	}
+	provider := &config.Provider{Env: map[string]string{"SHARED": "provider", "PROVIDER_ONLY": "kept"}}
+	opts, cleanup := NewOneshotRunRequest(context.Background(), ms, row, provider, nil, nil, "", false)
+	defer cleanup()
+	for key, want := range map[string]string{"SHARED": "agent", "OWNER_ONLY": "kept", "EMPTY": "", "AGENT_ONLY": "added", "PROVIDER_ONLY": "kept"} {
+		if got, ok := opts.AccountEnv[key]; !ok || got != want {
+			t.Errorf("%s = %q (present %v), want %q", key, got, ok, want)
+		}
+	}
+	if provider.Env["SHARED"] != "provider" {
+		t.Fatal("provider map was mutated")
 	}
 }

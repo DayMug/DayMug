@@ -759,7 +759,7 @@ func (s *SQLiteStore) SetUserEmail(ctx context.Context, userID, email string) er
 
 // SetUserEnv writes the self-managed environment text for agent processes.
 func (s *SQLiteStore) SetUserEnv(ctx context.Context, userID, env string) error {
-	if err := s.execSingleRowUpdate(ctx, "UPDATE users SET env = ? WHERE id = ?", env, userID); err == nil {
+	if err := s.execSingleRowUpdate(ctx, "UPDATE users SET env = ? WHERE id = ? AND deleted_at IS NULL", env, userID); err == nil {
 		return nil
 	} else if !errors.Is(err, ErrNotFound) {
 		return err

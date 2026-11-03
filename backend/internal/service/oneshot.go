@@ -40,9 +40,8 @@ func SandboxUnrestrictedFor(ctx context.Context, st store.Store, user store.User
 }
 
 // runEnvFor is the self-service environment a run of user inherits: its
-// owner's, because conversations and IM turns execute under an agent row whose
-// stored copy may be stale or empty. A human is its own owner; a failed lookup
-// falls back to the row's own value.
+// owner's. Agent overrides are layered on separately. A human is its own
+// owner; a failed lookup falls back to the row's own value.
 func runEnvFor(ctx context.Context, st store.Store, user store.User) string {
 	if st == nil {
 		return user.Env
@@ -113,6 +112,9 @@ func NewOneshotRunRequest(
 		opts.AccountEnv = resolved.Env
 	}
 	mergeUserEnvIntoRequest(&opts, runEnvFor(ctx, st, user))
+	if user.Username == "" {
+		mergeUserEnvIntoRequest(&opts, user.Env)
+	}
 	opts.Spawner = agent.NewSpawner()
 	if cfg != nil {
 		// Zero would silently fall back to streamcommon.DefaultStallTimeout and

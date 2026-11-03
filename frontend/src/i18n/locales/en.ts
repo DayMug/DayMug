@@ -1321,6 +1321,9 @@ export default {
       pricingNegativeError: "Rates must be non-negative.",
     },
     agentForm: {
+      environmentHelp: "Set one VAR=VAL per line for this Agent.",
+      environmentPrecedence:
+        "Inherits your environment variables. Values here override matching user and provider variables; leave empty to inherit all. Changes apply to subsequent runs.",
       basic: "Basic",
       basicSub: "Set the agent identity and working directory.",
       displayName: "Display name",

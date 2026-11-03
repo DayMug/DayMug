@@ -416,7 +416,7 @@ func TestUserOpsDuplicateAgent(t *testing.T) {
 	ms := storetest.New()
 	ms.Users = []store.User{
 		{ID: "human-a", Username: "alice", WorkDir: home},
-		{ID: "agent-a1", Name: "Scout", OwnerID: "human-a", WorkDir: home, RoleDefinition: "recon", Username: ""},
+		{ID: "agent-a1", Name: "Scout", OwnerID: "human-a", WorkDir: home, RoleDefinition: "recon", Username: "", Env: "TOKEN=agent"},
 	}
 	ops := &UserOps{Store: ms}
 
@@ -434,6 +434,9 @@ func TestUserOpsDuplicateAgent(t *testing.T) {
 	// somebody else's agent, and it never inherits a login.
 	if dup.OwnerID != "human-a" || dup.Username != "" {
 		t.Errorf("dup = %+v, want owner human-a and no username", dup)
+	}
+	if dup.Env != "TOKEN=agent" {
+		t.Fatalf("environment not copied: %q", dup.Env)
 	}
 	if dup.RoleDefinition != "recon" {
 		t.Errorf("role_definition = %q, want the source's", dup.RoleDefinition)
