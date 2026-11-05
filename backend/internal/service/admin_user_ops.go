@@ -48,8 +48,8 @@ type AdminCreateUserParams struct {
 	Email    string
 	IsAdmin  bool
 	WorkDir  string
-	// ProviderBindings maps CLI type to provider name; empty values clear the
-	// slot.
+	// ProviderBindings maps CLI type to provider name. Omitted account maps
+	// inherit onboarding defaults; explicit empty maps create an unbound user.
 	ProviderBindings map[string]string
 	// ProviderAccounts grants a SET of accounts per CLI type (default-first).
 	// A type present here is authoritative and supersedes the single-value
@@ -165,27 +165,6 @@ func (o *AdminUserOps) validateProviderAccounts(accounts map[string][]string) er
 	return nil
 }
 
-// requireSomeAccount rejects a new user that would start with no account at
-// all — such a user can log in but every chat is refused until an admin binds
-// one. Skipped when no provider is configured (nothing could be bound) and on a
-// nil Cfg, matching the other validators.
-func (o *AdminUserOps) requireSomeAccount(bindings map[string]string, accounts map[string][]string) error {
-	if _, ok := o.Cfg.InitialBindingProvider(); !ok {
-		return nil
-	}
-	for _, name := range bindings {
-		if strings.TrimSpace(name) != "" {
-			return nil
-		}
-	}
-	for _, names := range accounts {
-		if len(cleanAccountNames(names)) > 0 {
-			return nil
-		}
-	}
-	return BadRequest("bind at least one account")
-}
-
 // validateDefaultModel accepts an empty string (clears the per-user default) or
 // any model id that resolves to a configured provider.
 //
@@ -286,9 +265,6 @@ func (o *AdminUserOps) CreateHuman(ctx context.Context, p AdminCreateUserParams)
 	if err := o.validateProviderAccounts(p.ProviderAccounts); err != nil {
 		return store.User{}, err
 	}
-	if err := o.requireSomeAccount(bindings, p.ProviderAccounts); err != nil {
-		return store.User{}, err
-	}
 	// Reject duplicate usernames upfront for a clean error message; the partial
 	// unique index would catch it too but the SQL error is opaque.
 	if existing, err := o.Store.GetUserByUsername(ctx, username); err == nil && existing.ID != "" {
@@ -334,6 +310,12 @@ func (o *AdminUserOps) CreateHuman(ctx context.Context, p AdminCreateUserParams)
 		// has no bindings yet" from the read side.
 		ProviderBindings: bindings,
 		SandboxMode:      p.SandboxMode,
+	}
+	// Omitted maps inherit the global policy; explicit empty maps mean no binding.
+	if p.ProviderBindings == nil && p.ProviderAccounts == nil {
+		if err := ApplyNewUserDefaults(ctx, o.Store, o.Cfg, &user); err != nil {
+			return store.User{}, err
+		}
 	}
 	// Normalise here as well as in the store: the response body is this local
 	// value, so an unnormalised mode would be echoed back to the admin UI.

@@ -1130,6 +1130,9 @@ export default {
       },
     },
     adminUsers: {
+      useNewUserDefaults: "Use the global new-user defaults",
+      unboundAllowed: "Leave every account empty to create a user without model access.",
+
       title: "Users",
       eyebrow: "Admin",
       newUser: "New user",
@@ -1182,6 +1185,15 @@ export default {
       batchProviderDone: "Updated {type} for {count} user(s).",
     },
     adminGlobal: {
+      newUserDefaults: "Default model for new users",
+      newUserDefaultsIntro:
+        "Applies to future users created through SSO, user management, or the CLI, and their first Agent. Existing users keep their settings. Choosing a model also grants its account.",
+      newUserUnbound: "Do not bind an account or model",
+      newUserAccountDefault: "Use this account’s default model",
+      newUserDefaultsSaved: "New-user defaults saved.",
+      newUserDefaultsUnavailable:
+        "Saved account or model is unavailable. New users will remain unbound until you choose another option.",
+
       title: "Global settings",
       eyebrow: "Admin",
       intro:

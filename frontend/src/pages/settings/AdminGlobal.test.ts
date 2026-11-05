@@ -17,7 +17,9 @@ function makeRouter() {
 
 function mountAdmin() {
   const router = makeRouter();
-  return mount(AdminGlobal, { global: { plugins: [router] } });
+  return mount(AdminGlobal, {
+    global: { plugins: [router], stubs: { AdminGlobalNewUserDefaults: true } },
+  });
 }
 
 const mockFetchPublicConfig = vi.fn();

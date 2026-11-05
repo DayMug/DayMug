@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -340,5 +341,40 @@ func TestCreateHumanUser_BindsInitialAccount(t *testing.T) {
 	}
 	if got[config.CLITypeClaude] != "default" || len(got) != 1 {
 		t.Errorf("bindings = %v, want claude=default", got)
+	}
+}
+
+func TestCreateHumanUser_UsesNewUserDefaults(t *testing.T) {
+	for _, bound := range []bool{true, false} {
+		t.Run(fmt.Sprint(bound), func(t *testing.T) {
+			db := newCmdTestStore(t)
+			cfg := cfgWithHomeRoot(t.TempDir(), nil)
+			cfg.Providers = []config.Provider{{Name: "chosen", Type: config.CLITypeCodex}}
+			old := service.ModelOverrides()
+			t.Cleanup(func() { service.SetModelOverrides(old) })
+			service.SetModelOverrides(map[string]service.AccountModels{"chosen": {Models: []string{"cli-model"}}})
+			defaults := service.NewUserDefaults{}
+			wantAccount, wantModel := "", ""
+			if bound {
+				defaults = service.NewUserDefaults{ProviderType: "codex", ProviderName: "chosen", Model: "cli-model"}
+				wantAccount, wantModel = "chosen", "cli-model"
+			}
+			if _, err := service.SaveNewUserDefaults(context.Background(), db, cfg, defaults); err != nil {
+				t.Fatal(err)
+			}
+			user, err := createHumanUser(context.Background(), db, cfg, addUserParams{
+				Username: "alice", Email: "alice@example.com", Password: "hunter2",
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			persisted, err := db.GetUser(context.Background(), user.ID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if persisted.ProviderBindings["codex"] != wantAccount || persisted.DefaultModel != wantModel {
+				t.Fatalf("wrong CLI defaults: %v, %q", persisted.ProviderBindings, persisted.DefaultModel)
+			}
+		})
 	}
 }

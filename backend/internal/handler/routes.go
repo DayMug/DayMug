@@ -467,6 +467,8 @@ func (b *routeBuilder) registerAdminRoutes() {
 	b.admin.POST("/users/:id/disable", adminH.Disable)
 	b.admin.POST("/users/:id/enable", adminH.Enable)
 	b.admin.GET("/config/public", adminH.PublicConfig)
+	b.admin.GET("/new-user-defaults", adminH.GetNewUserDefaults)
+	b.admin.PUT("/new-user-defaults", adminH.PutNewUserDefaults)
 	b.admin.GET("/db/size", adminH.DatabaseSize)
 	b.admin.POST("/db/optimize", adminH.OptimizeDatabase)
 	b.admin.GET("/usage", b.usage.AdminAll)

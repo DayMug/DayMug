@@ -36,6 +36,7 @@ function emptyCreate(): AdminCreateUserData {
 }
 
 const form = ref<AdminCreateUserData>(emptyCreate());
+const useDefaults = ref(true);
 
 // DirPicker expects a non-optional string; the API type models work_dir as
 // optional. A bridging computed lets v-model write back through.
@@ -45,29 +46,6 @@ const workDir = computed<string>({
     form.value.work_dir = v;
   },
 });
-
-// prunedBindings drops entries whose value trims to empty, so an admin who
-// left a picker on "none" doesn't ship a clear instruction that would step on
-// a default. The update path deliberately does NOT prune — there an empty
-// value means "patch this slot back to the implicit default".
-function prunedBindings(b: Record<string, string> | undefined): Record<string, string> | undefined {
-  if (!b) return undefined;
-  const out: Record<string, string> = {};
-  for (const [k, v] of Object.entries(b)) {
-    const trimmed = (v ?? "").trim();
-    if (trimmed) out[k] = trimmed;
-  }
-  return Object.keys(out).length > 0 ? out : undefined;
-}
-
-// A new user must start with at least one account, otherwise every chat is
-// refused until an admin binds one. Nothing to require when no provider is
-// configured — the backend applies the same rule.
-const hasBinding = computed(
-  () =>
-    props.providerTypes.length === 0 ||
-    Object.values(form.value.provider_bindings ?? {}).some((v) => (v ?? "").trim() !== ""),
-);
 
 function setBinding(ptype: string, value: string) {
   if (!form.value.provider_bindings) form.value.provider_bindings = {};
@@ -82,7 +60,13 @@ function onSubmit() {
     name: form.value.name?.trim() || username,
     email: form.value.email?.trim() || "",
     work_dir: form.value.work_dir?.trim() || "",
-    provider_bindings: prunedBindings(form.value.provider_bindings),
+    provider_bindings: useDefaults.value
+      ? undefined
+      : Object.fromEntries(
+          Object.entries(form.value.provider_bindings ?? {})
+            .map(([key, value]) => [key, value.trim()])
+            .filter(([, value]) => value),
+        ),
   });
 }
 
@@ -90,6 +74,7 @@ function onSubmit() {
 // re-mounting the form (which would collapse the section).
 function reset() {
   form.value = emptyCreate();
+  useDefaults.value = true;
 }
 
 defineExpose({ reset });
@@ -142,28 +127,27 @@ defineExpose({ reset });
           <DirPicker v-model="workDir" />
         </div>
       </div>
-      <!-- One picker per CLI type configured in the YAML. Operators who only
-           configured claude see a single picker; once they add a codex
-           provider entry a second picker appears without a frontend deploy. -->
-      <label v-for="ptype in providerTypes" :key="'create-' + ptype" class="block">
-        <span class="text-[12px] text-muted-foreground">{{ typeLabels[ptype] }}</span>
-        <select
-          :value="form.provider_bindings?.[ptype] ?? ''"
-          :data-testid="'create-binding-' + ptype"
-          class="w-full mt-1 px-2 py-1 border border-border rounded bg-background text-[13px]"
-          @change="setBinding(ptype, ($event.target as HTMLSelectElement).value)"
-        >
-          <option value="">{{ t("common.none") }}</option>
-          <option v-for="n in providerOptionsByType[ptype]" :key="n" :value="n">{{ n }}</option>
-        </select>
+      <label class="col-span-2 flex items-center gap-2">
+        <input v-model="useDefaults" type="checkbox" data-testid="create-use-defaults" />
+        <span class="text-[13px]">{{ t("settings.adminUsers.useNewUserDefaults") }}</span>
       </label>
-      <p
-        v-if="!hasBinding"
-        class="col-span-2 text-[12px] text-muted-foreground"
-        data-testid="create-binding-required"
-      >
-        {{ t("settings.adminUsers.bindingRequired") }}
-      </p>
+      <template v-if="!useDefaults">
+        <label v-for="ptype in providerTypes" :key="'create-' + ptype" class="block">
+          <span class="text-[12px] text-muted-foreground">{{ typeLabels[ptype] }}</span>
+          <select
+            :value="form.provider_bindings?.[ptype] ?? ''"
+            :data-testid="'create-binding-' + ptype"
+            class="w-full mt-1 px-2 py-1 border border-border rounded bg-background text-[13px]"
+            @change="setBinding(ptype, ($event.target as HTMLSelectElement).value)"
+          >
+            <option value="">{{ t("common.none") }}</option>
+            <option v-for="n in providerOptionsByType[ptype]" :key="n" :value="n">{{ n }}</option>
+          </select>
+        </label>
+        <p class="col-span-2 text-[12px] text-muted-foreground">
+          {{ t("settings.adminUsers.unboundAllowed") }}
+        </p>
+      </template>
       <label class="flex items-center gap-2 mt-5">
         <input v-model="form.is_admin" type="checkbox" />
         <span class="text-[13px]">{{ t("settings.adminUsers.makeAdmin") }}</span>
@@ -178,7 +162,7 @@ defineExpose({ reset });
       </button>
       <button
         class="px-3 py-1.5 rounded-md bg-primary text-primary-foreground text-[13px] font-medium cursor-pointer disabled:opacity-50"
-        :disabled="busy || !form.username || !form.password || !hasBinding"
+        :disabled="busy || !form.username || !form.password"
         @click="onSubmit"
       >
         {{ t("common.create") }}

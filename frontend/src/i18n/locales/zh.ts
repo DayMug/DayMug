@@ -1068,6 +1068,9 @@ export default {
       },
     },
     adminUsers: {
+      useNewUserDefaults: "使用全局的新用户默认设置",
+      unboundAllowed: "所有账号留空即可创建不绑定模型的用户。",
+
       title: "用户",
       eyebrow: "管理",
       newUser: "新建用户",
@@ -1120,6 +1123,14 @@ export default {
       batchProviderDone: "已更新 {count} 个用户的 {type}。",
     },
     adminGlobal: {
+      newUserDefaults: "新用户默认模型",
+      newUserDefaultsIntro:
+        "对之后通过 SSO、用户管理或 CLI 创建的用户及其首个 Agent 生效，不影响已有用户。选择模型时会同时授权其所属账号。",
+      newUserUnbound: "不绑定账号和模型",
+      newUserAccountDefault: "使用该账号的默认模型",
+      newUserDefaultsSaved: "新用户默认设置已保存。",
+      newUserDefaultsUnavailable: "已保存的账号或模型已不可用。重新选择之前，新用户将保持不绑定。",
+
       title: "全局设置",
       eyebrow: "管理",
       intro: "只读查看服务启动时加载的 YAML 配置。如需修改，请编辑 config.yaml 并重启服务。",

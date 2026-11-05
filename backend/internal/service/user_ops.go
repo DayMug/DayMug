@@ -57,8 +57,9 @@ type AgentParams struct {
 // account is never born with an empty agent picker.
 func CreateDefaultAgent(ctx context.Context, db store.Store, human store.User) (store.User, error) {
 	return (&UserOps{Store: db}).CreateAgent(ctx, AgentParams{
-		Name:    human.Username,
-		WorkDir: human.WorkDir,
+		Name:         human.Username,
+		WorkDir:      human.WorkDir,
+		DefaultModel: human.DefaultModel,
 	}, human.ID)
 }
 

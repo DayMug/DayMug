@@ -232,7 +232,7 @@ describe("AdminUsers provider bindings", () => {
     expect(payload.provider_bindings).toBeUndefined();
   });
 
-  it("defaults a new user's provider binding to none (no implicit default)", async () => {
+  it("inherits global defaults and lets the admin choose no binding", async () => {
     mockFetchPublicConfig.mockResolvedValue(multiTypeConfig);
     mockListUsers.mockResolvedValue([]);
 
@@ -244,6 +244,10 @@ describe("AdminUsers provider bindings", () => {
       .trigger("click");
     await flushPromises();
 
+    expect(
+      (wrapper.get('[data-testid="create-use-defaults"]').element as HTMLInputElement).checked,
+    ).toBe(true);
+    await wrapper.get('[data-testid="create-use-defaults"]').setValue(false);
     const claudeSel = wrapper.find('[data-testid="create-binding-claude"]');
     expect(claudeSel.exists()).toBe(true);
     // Unbound by default: the empty value is selected...
@@ -445,6 +449,7 @@ describe("AdminUsers section composition", () => {
     const inputs = wrapper.find('[data-testid="create-user-form"]').findAll("input");
     await inputs[0].setValue("bob");
     await inputs[1].setValue("hunter2");
+    await wrapper.get('[data-testid="create-use-defaults"]').setValue(false);
     const sel = wrapper.find('[data-testid="create-binding-claude"]');
     (sel.element as HTMLSelectElement).value = "default";
     await sel.trigger("change");

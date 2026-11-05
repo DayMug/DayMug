@@ -14,6 +14,8 @@ Every file-API handler resolves paths relative to the selected Agent's `work_dir
 
 ## Per-user provider bindings
 
+New-user onboarding is configured under Admin → Global and persisted as `users.defaults` in `app_settings`. It grants one account and an optional model, or explicitly no account. SSO, admin creation, and `daymug user add` share this policy; admin creation can override it by supplying account maps (an explicit empty map means unbound). The first Agent copies the human’s initial default model and inherits account grants through its owner.
+
 A user is granted a *set* of accounts per provider type via `user_provider_bindings` (PK `(user_id, provider_type, provider_name)`), with exactly one row per type flagged `is_default=1`. So a user can hold several accounts of one type (e.g. two separate `claude` logins) side by side; a third-party Anthropic- or OpenAI-compatible endpoint is its own `claude-compatible` / `openai-compatible` type with its own bindings.
 
 A conversation may **pin** any account from its type's allowed set via `conversations.account_name`; unpinned conversations, the stateless API, and auto-title runs resolve to the type's default. The dispatcher (`service.ResolveConversationAccount`) re-validates a pinned account against the user's *current* allowed set before each turn, so revoking a binding takes effect even on conversations that already pinned it — there is no implicit fallback to a shared default, which would funnel every unbound user onto one account and trip its rate limit.

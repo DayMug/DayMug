@@ -201,6 +201,10 @@ func runUserAdd() error {
 		return err
 	}
 
+	if err := service.LoadModelOverrides(context.Background(), db); err != nil {
+		return err
+	}
+
 	params.Password = readPasswordTwice(fmt.Sprintf("New password for %s: ", params.Username))
 
 	user, err := createHumanUser(context.Background(), db, cfg, params)
@@ -322,10 +326,8 @@ func createHumanUser(ctx context.Context, db store.Store, cfg *config.Config, p 
 		IsAdmin:      p.Admin,
 		WorkDir:      workDir,
 	}
-	// Same rule as OIDC provisioning: the new user starts bound to the
-	// "default" provider, or the first one configured.
-	if prov, ok := cfg.InitialBindingProvider(); ok {
-		user.ProviderBindings = map[string]string{prov.Type: prov.Name}
+	if err := service.ApplyNewUserDefaults(ctx, db, cfg, &user); err != nil {
+		return store.User{}, err
 	}
 	if err := db.CreateUser(ctx, user); err != nil {
 		return store.User{}, fmt.Errorf("create user: %w", err)

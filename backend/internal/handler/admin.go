@@ -50,9 +50,9 @@ type adminCreateUserRequest struct {
 	Email    string `json:"email"`
 	IsAdmin  bool   `json:"is_admin"`
 	WorkDir  string `json:"work_dir"`
-	// ProviderBindings maps CLI type to provider name. Each entry is
-	// validated against the live YAML config; unknown (name, type) pairs
-	// reject the request. Empty values clear the slot.
+	// ProviderBindings maps CLI type to provider name. Omitted account maps
+	// inherit the global new-user defaults; an explicit empty map is unbound.
+	// Unknown (name, type) pairs reject the request.
 	ProviderBindings map[string]string `json:"provider_bindings,omitempty"`
 	// ProviderAccounts grants a SET of accounts per CLI type (the list is
 	// default-first). When a type appears here it is authoritative for that

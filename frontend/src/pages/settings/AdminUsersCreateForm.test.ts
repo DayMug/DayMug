@@ -28,36 +28,42 @@ async function fillCredentials(wrapper: ReturnType<typeof mountForm>) {
 }
 
 async function pickBinding(wrapper: ReturnType<typeof mountForm>, ptype: string, name: string) {
+  await wrapper.get('[data-testid="create-use-defaults"]').setValue(false);
   const sel = wrapper.find(`[data-testid="create-binding-${ptype}"]`);
   (sel.element as HTMLSelectElement).value = name;
   await sel.trigger("change");
 }
 
 describe("AdminUsersCreateForm", () => {
-  it("renders one binding picker per configured CLI type", () => {
+  it("renders one binding picker per configured CLI type when overriding defaults", async () => {
     const wrapper = mountForm();
+    await wrapper.get('[data-testid="create-use-defaults"]').setValue(false);
     expect(wrapper.find('[data-testid="create-binding-claude"]').exists()).toBe(true);
     expect(wrapper.find('[data-testid="create-binding-codex"]').exists()).toBe(true);
   });
 
-  it("leaves every binding unset so a new user gets no implicit default", () => {
+  it("leaves custom bindings unset", async () => {
     const wrapper = mountForm();
+    await wrapper.get('[data-testid="create-use-defaults"]').setValue(false);
     const sel = wrapper.find('[data-testid="create-binding-claude"]');
     expect((sel.element as HTMLSelectElement).value).toBe("");
     expect(sel.findAll("option")[0].text()).toBe("none");
   });
 
-  it("keeps Create disabled until credentials and at least one account are set", async () => {
+  it("inherits global defaults when account maps are omitted", async () => {
     const wrapper = mountForm();
     expect(createButton(wrapper)?.attributes("disabled")).toBeDefined();
-
     await fillCredentials(wrapper);
-    expect(createButton(wrapper)?.attributes("disabled")).toBeDefined();
-    expect(wrapper.find('[data-testid="create-binding-required"]').exists()).toBe(true);
+    await createButton(wrapper)?.trigger("click");
+    expect(wrapper.emitted("submit")?.[0][0]).toMatchObject({ provider_bindings: undefined });
+  });
 
-    await pickBinding(wrapper, "codex", "default-codex");
-    expect(createButton(wrapper)?.attributes("disabled")).toBeUndefined();
-    expect(wrapper.find('[data-testid="create-binding-required"]').exists()).toBe(false);
+  it("allows an explicit unbound user with an empty account map", async () => {
+    const wrapper = mountForm();
+    await fillCredentials(wrapper);
+    await wrapper.get('[data-testid="create-use-defaults"]').setValue(false);
+    await createButton(wrapper)?.trigger("click");
+    expect(wrapper.emitted("submit")?.[0][0]).toMatchObject({ provider_bindings: {} });
   });
 
   it("does not require an account when no provider is configured", async () => {
@@ -92,6 +98,7 @@ describe("AdminUsersCreateForm", () => {
   it("submits the bindings the admin actually picked", async () => {
     const wrapper = mountForm();
     await fillCredentials(wrapper);
+    await wrapper.get('[data-testid="create-use-defaults"]').setValue(false);
     const sel = wrapper.find('[data-testid="create-binding-claude"]');
     (sel.element as HTMLSelectElement).value = "alt";
     await sel.trigger("change");

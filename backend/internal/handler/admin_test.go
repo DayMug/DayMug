@@ -60,6 +60,8 @@ func setupAdminRouter(t *testing.T, h *AdminHandler, callerID string, isAdmin bo
 	g.POST("/users/:id/disable", h.Disable)
 	g.POST("/users/:id/enable", h.Enable)
 	g.GET("/config/public", h.PublicConfig)
+	g.GET("/new-user-defaults", h.GetNewUserDefaults)
+	g.PUT("/new-user-defaults", h.PutNewUserDefaults)
 	g.GET("/db/size", h.DatabaseSize)
 	g.POST("/db/optimize", h.OptimizeDatabase)
 	return r

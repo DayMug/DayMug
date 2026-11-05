@@ -330,32 +330,16 @@ func TestAdminUserOpsBatchesValidateBeforeWriting(t *testing.T) {
 	})
 }
 
-// A new human must start with at least one account whenever one is
-// configured; otherwise every chat is refused until an admin binds one.
-func TestAdminUserOpsCreateHumanRequiresAccount(t *testing.T) {
+func TestAdminUserOpsCreateHumanAllowsUnboundAccount(t *testing.T) {
 	ops, fake := adminOpsFixture(t)
-	_, err := ops.CreateHuman(context.Background(), AdminCreateUserParams{
-		Email: "alice@example.com", Password: "pw",
-		ProviderBindings: map[string]string{config.CLITypeClaude: ""},
+	user, err := ops.CreateHuman(context.Background(), AdminCreateUserParams{
+		Email: "alice@example.com", Password: "pw", ProviderBindings: map[string]string{},
 	})
-	wantUserOpsStatus(t, err, http.StatusBadRequest, "bind at least one account")
-	if len(fake.Users) != 0 {
-		t.Errorf("a rejected create wrote %d rows", len(fake.Users))
+	if err != nil {
+		t.Fatal(err)
 	}
-
-	// A multi-account set satisfies the rule on its own.
-	if _, err := ops.CreateHuman(context.Background(), AdminCreateUserParams{
-		Email: "alice@example.com", Password: "pw",
-		ProviderAccounts: map[string][]string{config.CLITypeClaude: {"default"}},
-	}); err != nil {
-		t.Fatalf("CreateHuman with provider_accounts: %v", err)
+	if len(user.ProviderBindings) != 0 || user.DefaultModel != "" {
+		t.Fatalf("unexpected binding: %+v", user)
 	}
-
-	// With no provider configured there is nothing to bind, so no rule.
-	ops.Cfg.Providers = nil
-	if _, err := ops.CreateHuman(context.Background(), AdminCreateUserParams{
-		Email: "bob@example.com", Password: "pw",
-	}); err != nil {
-		t.Fatalf("CreateHuman without providers: %v", err)
-	}
+	assertDefaultAgent(t, fake.Users, user)
 }

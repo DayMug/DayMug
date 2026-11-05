@@ -12,6 +12,7 @@ import AdminGlobalUpgrade from "./AdminGlobalUpgrade.vue";
 import AdminGlobalPauseTasks from "./AdminGlobalPauseTasks.vue";
 import AdminGlobalDatabase from "./AdminGlobalDatabase.vue";
 import AdminGlobalHelpDoc from "./AdminGlobalHelpDoc.vue";
+import AdminGlobalNewUserDefaults from "./AdminGlobalNewUserDefaults.vue";
 import SettingsDetailHeader from "./SettingsDetailHeader.vue";
 import { usePageTitle } from "@/composables/useDocumentTitle";
 
@@ -72,6 +73,8 @@ async function onUpgradeSucceeded() {
       <!-- Directly under the upgrade panel: this is the switch you flip
            immediately before running one. -->
       <AdminGlobalPauseTasks />
+
+      <AdminGlobalNewUserDefaults />
 
       <section class="border border-border rounded-md bg-card p-4">
         <h2 class="text-[14px] font-semibold mb-2">

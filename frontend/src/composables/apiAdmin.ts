@@ -372,3 +372,19 @@ export async function adminSaveProviders(providers: AdminProvider[]): Promise<Ad
     errorBody: "message",
   });
 }
+
+export interface NewUserDefaults {
+  provider_type: string;
+  provider_name: string;
+  model: string;
+}
+
+export async function adminFetchNewUserDefaults(): Promise<NewUserDefaults> {
+  return request("/api/admin/new-user-defaults", undefined, { label: "new user defaults" });
+}
+
+export async function adminSaveNewUserDefaults(data: NewUserDefaults): Promise<NewUserDefaults> {
+  return request("/api/admin/new-user-defaults", jsonRequestInit("PUT", data), {
+    label: "save new user defaults",
+  });
+}

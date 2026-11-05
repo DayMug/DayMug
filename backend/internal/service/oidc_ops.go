@@ -153,11 +153,8 @@ func (o *OIDCUserOps) ProvisionUser(ctx context.Context, id *OIDCIdentity) (stor
 		WorkDir:  workDir,
 		IsAdmin:  IsBootstrapAdmin(o.Cfg, username),
 	}
-	// Every new user starts with at least one account: the "default" provider,
-	// or the first one configured. Without it the first chat is refused until
-	// an admin notices and binds one by hand.
-	if p, ok := o.Cfg.InitialBindingProvider(); ok {
-		user.ProviderBindings = map[string]string{p.Type: p.Name}
+	if err := ApplyNewUserDefaults(ctx, o.Store, o.Cfg, &user); err != nil {
+		return store.User{}, err
 	}
 	if err := o.Store.CreateUser(ctx, user); err != nil {
 		return store.User{}, Internal(err.Error(), err)

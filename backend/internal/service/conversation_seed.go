@@ -82,15 +82,19 @@ func ResolveConversationSeed(cfg *config.Config, agent store.User, req Conversat
 	if req.Account != "" && (cfg == nil || cfg.FindAccountForType(req.Account, provider) == nil) {
 		return ConversationSeed{}, BadRequest("provider account is not configured for provider " + provider)
 	}
+	account := req.Account
+	if account == "" {
+		account = agent.ProviderBindings[provider]
+	}
 	if model == "" {
-		// The pinned account's latest when one is given, else the type
-		// default, so a codex-qwen pin doesn't inherit the stock codex default.
-		model = LatestModelForAccount(cfg, provider, req.Account)
+		// Use the pinned or granted default account so an alternate
+		// account does not inherit the first account’s model.
+		model = LatestModelForAccount(cfg, provider, account)
 	}
 	if model == "" {
 		return ConversationSeed{}, BadRequest(NoModelsConfiguredError(provider))
 	}
-	if !IsValidModelForAccount(cfg, provider, req.Account, model) {
+	if !IsValidModelForAccount(cfg, provider, account, model) {
 		return ConversationSeed{}, BadRequest("model does not belong to provider")
 	}
 	return ConversationSeed{Provider: provider, Model: model, ThinkLevel: thinkLevel}, nil

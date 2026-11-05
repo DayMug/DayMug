@@ -141,7 +141,9 @@ These are not configured in YAML; they are managed under "Settings → Admin pan
 - Token prices: input, cache, and output prices for `codex` / `openai-compatible` / `claude-compatible` (`claude` self-reports cost that matches the Anthropic bill, so no override is needed).
 - Transport: chosen per provider type, see the two sections below; before saving, the host is probed for the required runtime, and the change takes effect from the next turn.
 
-The first item in the list is the default provider for new conversations. Users without a bound account of the matching type are still rejected and never silently share another account. Changes saved to SQLite apply to new tasks immediately, with no file edit or restart.
+The first item in the list is the default provider for new conversations. Users without a bound account of the matching type are still rejected and never silently share another account.
+
+Under **Admin → Global → Default model for new users**, choose a model from a specific account, follow that account’s default model, or choose **Do not bind an account or model**. The policy applies to future SSO, admin-created, and CLI-created users and their first Agent; existing users are unchanged. Admin user creation can override it with explicit accounts or no bindings. Before the first save, the existing initial-account rule is preserved (the account named `default`, otherwise the first configured account). If a saved account or model is removed, newcomers remain unbound until an admin updates the policy. Changes saved to SQLite apply to new tasks immediately, with no file edit or restart.
 
 Providers are never read from YAML; a `providers` or `claude_accounts` block left in an old config file is ignored.
 

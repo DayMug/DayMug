@@ -206,6 +206,7 @@ The server remembers the latest `rate_limit` reading per account in memory (`Poo
 | POST | `/users/:id/password` · `/disable` · `/enable` | Set password / disable / enable |
 | POST | `/users/default-model` · `/sandbox-mode` · `/provider-binding` | Bulk set: default model / sandbox mode / provider binding |
 | GET | `/config/public` | Public config (consumed by the frontend) |
+| GET / PUT | `/new-user-defaults` | Read/replace future users’ account and model: `{provider_type, provider_name, model}`; all empty means unbound |
 | GET/POST | `/db/size` · `/db/optimize` | Database size / VACUUM optimize; the optimize response includes counts of cleaned-up expired sessions and soft-deleted conversations / users / Agents past retention |
 | GET/PUT | `/pause` | Read / write the "pause processing new tasks" switch (`{"paused": bool}`). Not persisted; resets to false on restart. While paused, chat and scheduled jobs stay at `queue_status='pending'` (survives restarts), and IM bots reject outright; the resume response includes `resumed_conversations` |
 | GET | `/usage` | Site-wide usage |
