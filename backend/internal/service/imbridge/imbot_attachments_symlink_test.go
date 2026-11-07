@@ -206,9 +206,11 @@ func TestMaterializeInboundImages_SeparatesAgentsSharingAHome(t *testing.T) {
 }
 
 // An agent whose owner cannot be resolved has no home root, and must not fall
-// back to writing somewhere no read path looks.
+// back to writing somewhere no read path looks. The store follows OwnerID, so
+// an owner id that matches no user is what an orphan looks like.
 func TestMaterializeInboundImages_OrphanAgentRefused(t *testing.T) {
 	b, agentUser, _ := attachmentBridge(t)
+	agentUser.OwnerID = "ghost"
 	agentUser.Email = "ghost@example.com"
 
 	msg := imbot.Message{Platform: imbot.PlatformSlack, Attachments: []imbot.Attachment{pngAttachment("a")}}
