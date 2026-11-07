@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"errors"
+	"strings"
 	"time"
 )
 
@@ -218,6 +219,13 @@ type RunRequest struct {
 	// this field is unused there.
 	McpConfigPath string
 
+	// ToolRoute, when set, moves the agent's file and shell tools off this
+	// host: the listed built-ins are removed and their names resolve to the
+	// MCP tools of ToolRoute.MCPServers instead. Only adapters that can
+	// enforce all three parts accept it; the rest fail the turn with
+	// ErrToolRouteUnsupported rather than run those tools on the server.
+	ToolRoute *ToolRoute
+
 	// ConfigDir maps to CLAUDE_CONFIG_DIR (Claude family) or CODEX_HOME
 	// (codex) — i.e. the account-scoped on-disk credentials/config
 	// directory. Empty inherits the process default (~/.claude or ~/.codex).
@@ -254,4 +262,32 @@ type RunRequest struct {
 	// period. Activity probes may extend StallTimeout repeatedly, but
 	// never beyond this duration. Zero disables the absolute cap.
 	MaxSilentTimeout time.Duration
+}
+
+// ToolRoute redirects a turn's built-in tools to MCP tools served elsewhere —
+// a paired desktop client, for DayMug-Client conversations.
+type ToolRoute struct {
+	// MCPServers is merged into the turn's MCP server map.
+	MCPServers map[string]any
+	// Disallowed built-in tools are removed from the model's tool list.
+	Disallowed []string
+	// Aliases resolves a model-emitted built-in name (e.g. "Bash", which a
+	// skill document may still tell the model to call) to its MCP stand-in.
+	Aliases map[string]string
+}
+
+// ErrToolRouteUnsupported is returned by adapters that cannot honour
+// RunRequest.ToolRoute.
+var ErrToolRouteUnsupported = errors.New("this agent transport cannot run tools on a paired device; switch the provider to the Agent SDK transport")
+
+// DeviceMCPServer is the MCP server a device-bound turn's tools live on.
+const DeviceMCPServer = "daymug_local"
+
+// DisplayToolName is how a tool call is shown and stored: a device tool is
+// the built-in it stands in for, so its card renders like a local Bash/Edit.
+func DisplayToolName(name string) string {
+	if rest, ok := strings.CutPrefix(name, "mcp__"+DeviceMCPServer+"__"); ok && rest != "" {
+		return rest
+	}
+	return name
 }

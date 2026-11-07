@@ -5,3 +5,4 @@
 113	destructive	drop the external HTTP API: api_tokens, api_session_costs, users.allow_api
 114	destructive	drop published sites: served_directories, users.serve_slug, agents.serve_slug
 115	additive	create scheduled_prompts
+116	additive	create devices and conversation_devices

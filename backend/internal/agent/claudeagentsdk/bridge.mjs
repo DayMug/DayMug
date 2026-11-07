@@ -140,6 +140,12 @@ function buildOptions(req, abortController, questions) {
   } else {
     options.disallowedTools = ["AskUserQuestion"];
   }
+  if (Array.isArray(req.disallowedTools) && req.disallowedTools.length > 0) {
+    options.disallowedTools = [...(options.disallowedTools ?? []), ...req.disallowedTools];
+  }
+  if (req.toolAliases && Object.keys(req.toolAliases).length > 0) {
+    options.toolAliases = req.toolAliases;
+  }
   if (req.cwd) options.cwd = req.cwd;
   if (req.sessionId) options[req.resume ? "resume" : "sessionId"] = req.sessionId;
   if (req.model) options.model = req.model;

@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import ModelSelector from "@/components/ModelSelector.vue";
+import { desktopClient } from "@/lib/desktopClient";
+import DeviceSelector from "./DeviceSelector.vue";
 import type { Conversation } from "@/composables/apiTypes";
 import type { ContextUsage, RateLimitInfo, RateLimitWindow } from "@/stores/chatContextStore";
 import ContextUsageBar from "./ContextUsageBar.vue";
@@ -22,6 +24,10 @@ const emit = defineEmits<{
   updated: [conversation: Conversation];
   error: [message: string];
 }>();
+
+// Fixed for the page's lifetime: the desktop client injects its marker before
+// any script runs, and a browser never has one.
+const inDesktopClient = desktopClient() !== null;
 </script>
 
 <template>
@@ -41,6 +47,11 @@ const emit = defineEmits<{
       :conversation-started="conversationStarted"
       :provider-accounts="providerAccounts"
       @updated="emit('updated', $event)"
+      @error="emit('error', $event)"
+    />
+    <DeviceSelector
+      v-if="inDesktopClient && conversation"
+      :conversation-id="conversation.id"
       @error="emit('error', $event)"
     />
     <span v-if="error" class="min-w-0 truncate text-[11px] text-destructive" :title="error">{{

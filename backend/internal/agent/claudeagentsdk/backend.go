@@ -87,6 +87,10 @@ type bridgeRequest struct {
 	Effort              string         `json:"effort,omitempty"`
 	MCPServers          map[string]any `json:"mcpServers,omitempty"`
 	EnableUserQuestions bool           `json:"enableUserQuestions,omitempty"`
+	// DisallowedTools and ToolAliases carry RunRequest.ToolRoute; its MCP
+	// servers are merged into MCPServers.
+	DisallowedTools []string          `json:"disallowedTools,omitempty"`
+	ToolAliases     map[string]string `json:"toolAliases,omitempty"`
 	// Minimal strips the session down to a single cheap completion: no
 	// settings, no tools, no MCP, no session file, and SystemPrompt replaces
 	// the Claude Code preset instead of appending to it. Used by title
@@ -302,6 +306,7 @@ func (r *runner) RunWithSession(ctx context.Context, prompt, workDir string, opt
 		}
 		req.MCPServers = cfg.MCPServers
 	}
+	applyToolRoute(&req, opts.ToolRoute)
 	return r.stream(ctx, req, workDir, opts, outputCh)
 }
 
@@ -639,4 +644,30 @@ func materializeBridge() (string, error) {
 		return "", fmt.Errorf("prepare CAS bridge: %w", err)
 	}
 	return path, nil
+}
+
+// applyToolRoute merges a ToolRoute into the bridge request. The route's
+// servers win a name clash with the user's own MCP config: a user entry named
+// like the route's server must not be able to stand in for the device.
+func applyToolRoute(req *bridgeRequest, route *agent.ToolRoute) {
+	if route == nil {
+		return
+	}
+	if len(route.MCPServers) > 0 {
+		merged := make(map[string]any, len(req.MCPServers)+len(route.MCPServers))
+		for k, v := range req.MCPServers {
+			merged[k] = v
+		}
+		for k, v := range route.MCPServers {
+			merged[k] = v
+		}
+		req.MCPServers = merged
+	}
+	req.DisallowedTools = append([]string(nil), route.Disallowed...)
+	if len(route.Aliases) > 0 {
+		req.ToolAliases = make(map[string]string, len(route.Aliases))
+		for k, v := range route.Aliases {
+			req.ToolAliases[k] = v
+		}
+	}
 }

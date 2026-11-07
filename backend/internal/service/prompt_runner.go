@@ -78,6 +78,9 @@ type PromptRunner struct {
 	// transport. IM-originated runs use their own bridge and never enter this
 	// dispatcher, so observing here cannot echo those messages back twice.
 	Observer PromptObserver
+	// Devices routes a device-bound conversation's tools to its desktop
+	// client. nil leaves every conversation on the server.
+	Devices *DeviceHub
 }
 
 type promptRunContext struct {
@@ -664,6 +667,9 @@ func (r *PromptRunner) BuildRunOptions(ctx context.Context, convID, workDir stri
 	r.applySessionToRequest(ctx, &opts, convID, workDir)
 	if resolvedAccount != nil {
 		opts.ContextWindow = ModelSpecFor(resolvedAccount.Name, opts.Model).ContextWindow
+	}
+	if r.Devices.ApplyDeviceRoute(ctx, r.Store, &opts, convID, DeviceMCPBaseURL(r.Cfg)) {
+		return opts
 	}
 	AppendSystem(&opts, WebArtifactSystemPrompt)
 	AppendSystem(&opts, AbsolutePathsSystemPrompt)

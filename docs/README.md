@@ -20,6 +20,7 @@ docs/
 | Connect Slack / Feishu (Lark) / Telegram bots | [guides/im-bots.md](guides/im-bots.md) |
 | Connect a WeChat iLink bot | [guides/wechat.md](guides/wechat.md) |
 | How slash-prefixed text and `/compact` behave | [guides/slash-commands.md](guides/slash-commands.md) |
+| Run a conversation's tools on your own computer with the desktop client | [guides/desktop-client.md](guides/desktop-client.md) |
 
 ## Architecture
 

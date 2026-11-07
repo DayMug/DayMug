@@ -76,6 +76,9 @@ type Runtime struct {
 	// PromptObserver mirrors web-chat turns to an attached transport (the IM
 	// thread that created the conversation).
 	PromptObserver PromptObserver
+	// Devices relays device-bound conversations' tools to paired desktop
+	// clients.
+	Devices *DeviceHub
 }
 
 // NewRuntime builds a Runtime with the instances it owns outright — the
@@ -90,6 +93,7 @@ func NewRuntime(s store.Store, backends *BackendRegistry) *Runtime {
 		UserHub:            NewUserHub(),
 		Pause:              NewPauseGate(),
 		GuardrailReminders: NewGuardrailReminderTracker(),
+		Devices:            NewDeviceHub(s),
 	}
 	if s != nil {
 		// The processor resolves every collaborator from rt at call time, so a
@@ -161,6 +165,7 @@ func (rt *Runtime) PromptRunner() *PromptRunner {
 		GuardrailReminders: rt.GuardrailReminders,
 		Backends:           rt.Backends,
 		Observer:           rt.PromptObserver,
+		Devices:            rt.Devices,
 	}
 }
 

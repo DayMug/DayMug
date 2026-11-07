@@ -127,6 +127,7 @@ func RegisterRoutes(r *gin.Engine, s store.Store, drainer *service.Drainer, cfg 
 	b.registerMarketplaceRoutes()
 	b.registerHelpRoutes()
 	b.registerFileRoutes()
+	b.registerDeviceRoutes()
 
 	b.recoverPendingPrompts()
 
@@ -186,6 +187,24 @@ func (b *routeBuilder) registerPublicRoutes() {
 		b.api.GET("/auth/oidc/login", oidcH.Login)
 		b.api.GET("/auth/oidc/callback", oidcH.Callback)
 	}
+}
+
+// registerDeviceRoutes mounts DayMug-Client support. The client's own calls
+// (claim, connect) and the agents' MCP endpoint authenticate by token, not by
+// session cookie, so they sit on the public group.
+func (b *routeBuilder) registerDeviceRoutes() {
+	h := &DeviceHandler{Store: b.store, Hub: b.rt.Devices, Version: b.opts.CurrentVersion}
+	b.api.POST("/devices/claim", h.Claim)
+	b.api.GET("/devices/connect", h.Connect)
+	b.api.Any("/devices/mcp", h.MCP)
+	b.authed.GET("/devices", h.List)
+	b.authed.DELETE("/devices/:id", h.Revoke)
+	b.authed.POST("/devices/pair", h.Pair)
+	b.authed.GET("/devices/current", h.Current)
+	b.authed.POST("/devices/:id/pick-folder", h.PickFolder)
+	b.authed.GET("/conversations/:id/device", h.GetConversationDevice)
+	b.authed.PUT("/conversations/:id/device", h.SetConversationDevice)
+	b.authed.DELETE("/conversations/:id/device", h.ClearConversationDevice)
 }
 
 // registerAccountRoutes mounts the signed-in user's own settings, the

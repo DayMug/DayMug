@@ -171,6 +171,22 @@ The client (`composables/useFileWatch.ts`) has two fallback paths, both revertin
 `ready` within 5s of subscribing. The latter covers NFS / some container overlay filesystems, where inotify accepts the subscription and then never reports
 events, indistinguishable from "the file never changed".
 
+## Desktop client devices
+
+Used only by DayMug-Client and the page it hosts; see [guides/desktop-client.md](../guides/desktop-client.md).
+
+| Method | Path | Purpose |
+|------|------|------|
+| POST | `/devices/claim` | Public. Client polls with `{nonce}`; 200 `{device_id, token}` once its page paired it, 204 otherwise |
+| GET | `/devices/connect` | Public, `Authorization: Bearer <device token>`. The client's tool WebSocket (`hello` first, then `call`/`cancel`/`rebind` ↔ `result`) |
+| GET/POST/DELETE | `/devices/mcp` | Public, loopback only, `Authorization: Bearer <conversation MCP token>`. MCP endpoint the Agent SDK of a bound turn calls |
+| GET | `/devices` | The caller's devices with `online` / `hostname` / `version` |
+| DELETE | `/devices/:id` | Revoke a device: drops its socket and its conversation bindings |
+| POST | `/devices/pair` | `{nonce, name, os}` from the page inside the client; 202 |
+| GET | `/devices/current?nonce=` | `{device}` hosting this page, or `{device: null}` |
+| POST | `/devices/:id/pick-folder` | Opens the native folder dialog on the device; `{path}` (empty when cancelled) |
+| GET/PUT/DELETE | `/conversations/:id/device` | Read / set `{device_id, work_dir}` (device must be online; the folder is canonicalised on it) / clear the conversation's binding |
+
 ## Authenticated: usage
 
 | Method | Path | Purpose |

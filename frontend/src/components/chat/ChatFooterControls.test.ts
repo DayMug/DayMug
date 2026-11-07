@@ -40,6 +40,11 @@ function mountControls(overrides: Partial<InstanceType<typeof ChatFooterControls
 }
 
 describe("ChatFooterControls", () => {
+  it("never shows the device selector in a plain browser", () => {
+    const wrapper = mountControls();
+    expect(wrapper.find('[data-testid="device-selector"]').exists()).toBe(false);
+  });
+
   it("groups the model, context, and rate-limit controls in the composer footer", () => {
     const wrapper = mountControls();
 

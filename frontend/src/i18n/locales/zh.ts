@@ -540,6 +540,15 @@ export default {
       applyAll: "对后续 {n} 个文件中的冲突执行相同操作",
     },
   },
+  device: {
+    heading: "工具运行位置",
+    server: "服务器",
+    serverTitle: "文件和命令在 DayMug 服务器上执行",
+    boundTitle: "文件和命令在 {name} 的 {dir} 中执行",
+    pickFolder: "选择本机文件夹…",
+    notPaired: "本机尚未连接到 DayMug，请稍后再试",
+    failed: "无法切换此对话的运行位置",
+  },
   help: {
     title: "帮助",
   },

@@ -92,6 +92,11 @@ var migrationSteps = []migrationStep{
 		desc: "create scheduled_prompts",
 		run:  createScheduledPrompts,
 	},
+	// 116
+	{
+		desc: "create devices and conversation_devices",
+		run:  createDevices,
+	},
 }
 
 type appliedMigration struct {

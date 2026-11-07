@@ -113,6 +113,9 @@ func (r *runner) RunOneshot(ctx context.Context, prompt, workDir string, opts ag
 
 func (r *runner) RunWithSession(ctx context.Context, prompt, workDir string, opts agent.RunRequest, outputCh chan<- agent.StreamEvent) error {
 	defer close(outputCh)
+	if opts.ToolRoute != nil {
+		return agent.ErrToolRouteUnsupported
+	}
 
 	args := []string{
 		"-p",

@@ -43,6 +43,8 @@ Storage uses pure-Go `modernc/sqlite` (no CGO). The database file is hard-coded 
 | `marketplace_apps` | Site-wide shared app-marketplace links; any logged-in user can add or delete them |
 | `cron_jobs` | User-owned scheduled Agent tasks; each trigger creates a regular conversation and enqueues `prompt` as a user message |
 | `scheduled_prompts` | Composer messages held for a later send time ("Schedule send"); each becomes an ordinary pending prompt in its conversation when due |
+| `devices` | Desktop clients (DayMug-Client) paired to a human user; `token_hash` is the SHA-256 of the client's bearer token |
+| `conversation_devices` | Conversation → device binding and the folder on that device its tools run in; cascades with both the conversation and the device |
 | `schema_migrations` | Applied startup migrations: version, name, whether destructive, and when applied |
 
 ### `marketplace_apps`

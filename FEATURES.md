@@ -156,6 +156,18 @@ Desktop is a three-pane workspace: a slim agent rail, the conversation list, the
 | Schema migrations | Auto-applied on startup; each migration commits together with its ledger row |
 | Retention | Opt-in automatic deletion via `retention` in config (inactive conversations, soft-deleted rows, old uploads); all default to 0 = never |
 
+### Desktop client (DayMug-Client)
+
+| Aspect | Behaviour |
+|--------|-----------|
+| Scope | Inside the desktop app only; a browser shows and requests nothing device-related |
+| Pairing | Silent: the logged-in page vouches for the client hosting it via a per-launch nonce |
+| Run location | Per conversation: server (default) or a folder on this computer, picked with the native dialog; recent folders one click away |
+| Tools on the device | Bash / Read / Write / Edit / Glob / Grep over an outbound WebSocket; server-side file and shell built-ins are removed for that conversation; runs automatically, no approval step |
+| Providers | Claude on the Agent SDK transport; other transports refuse a bound turn |
+
+See `docs/guides/desktop-client.md`.
+
 ### IM bot integration (Slack / Feishu (Lark) / Telegram / WeChat)
 
 | Aspect | Behaviour |

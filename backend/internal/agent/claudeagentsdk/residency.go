@@ -922,6 +922,10 @@ func bridgeFingerprint(opts agent.RunRequest, req bridgeRequest) string {
 	if mcp, err := json.Marshal(req.MCPServers); err == nil {
 		write(string(mcp))
 	}
+	write(strings.Join(req.DisallowedTools, ","))
+	if aliases, err := json.Marshal(req.ToolAliases); err == nil {
+		write(string(aliases))
+	}
 	return hex.EncodeToString(h.Sum(nil))
 }
 

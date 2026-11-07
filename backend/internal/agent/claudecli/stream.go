@@ -433,7 +433,7 @@ func parseAssistantMessage(msg streamMessage) []agent.StreamEvent {
 	for _, block := range msg.Message.Content {
 		if block.Type == "tool_use" && block.Name != "" {
 			info := map[string]any{
-				"name": block.Name,
+				"name": agent.DisplayToolName(block.Name),
 			}
 			if block.ID != "" {
 				info["id"] = block.ID
@@ -601,7 +601,7 @@ func parseContentBlockStart(evt apiEvent) []agent.StreamEvent {
 	}
 
 	if cb.Type == "tool_use" && cb.Name != "" {
-		info := map[string]string{"name": cb.Name}
+		info := map[string]string{"name": agent.DisplayToolName(cb.Name)}
 		if cb.ID != "" {
 			info["id"] = cb.ID
 		}

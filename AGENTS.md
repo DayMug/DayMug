@@ -83,6 +83,7 @@ Start from `docs/README.md` (it indexes everything below); load a row only when 
 | Linux install (one-line / from-source / public access) | `docs/guides/installation.md` |
 | Slash text pass-through, `/compact` endpoint | `docs/guides/slash-commands.md` |
 | IM bots (Slack Socket Mode / Feishu long connection / Telegram long polling), channel rules, thread↔session mapping, case-file mode | `docs/guides/im-bots.md` |
+| Desktop client (DayMug-Client): device pairing, tool tunnel, `/api/devices/mcp`, `RunRequest.ToolRoute` | `docs/guides/desktop-client.md` |
 | WeChat iLink Bot (QR-code pairing, long polling, `/new` session splitting, progress fallback without message edits) | `docs/guides/wechat.md` |
 | Auth, agents, sandbox, per-user provider bindings, account pool, `safePath()` | `docs/architecture/multi-user.md` |
 | Release tagging, GitHub Releases publish, self-upgrade, watchdog rollback | `RELEASING.md` (steps), `docs/development/releases.md` (mechanism) |

@@ -49,6 +49,8 @@ type Fake struct {
 	Messages    map[string][]store.Message
 	// ScheduledPrompts backs the scheduled-prompt store in insertion order.
 	ScheduledPrompts []store.ScheduledPrompt
+	devicesOnce      sync.Once
+	devices          *fakeDevices
 	// deletedMessages keeps a deleted conversation's transcript, mirroring
 	// the soft delete that leaves message rows on disk.
 	deletedMessages map[string][]store.Message

@@ -95,3 +95,16 @@ func TestBackend_CapabilitiesDifferAcrossAdapters(t *testing.T) {
 		}
 	}
 }
+
+func TestDisplayToolNameStripsDevicePrefix(t *testing.T) {
+	for in, want := range map[string]string{
+		"mcp__daymug_local__Bash": "Bash",
+		"mcp__other__Bash":        "mcp__other__Bash",
+		"mcp__daymug_local__":     "mcp__daymug_local__",
+		"Read":                    "Read",
+	} {
+		if got := agent.DisplayToolName(in); got != want {
+			t.Errorf("DisplayToolName(%q) = %q, want %q", in, got, want)
+		}
+	}
+}

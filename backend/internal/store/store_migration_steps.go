@@ -224,3 +224,34 @@ func createScheduledPrompts(ctx context.Context, tx *sql.Tx) error {
 	}
 	return nil
 }
+
+// createDevices adds paired desktop clients and the conversation → device
+// binding that routes a conversation's tools to one of them. The binding is a
+// table of its own rather than conversation columns so server-side
+// conversations never carry (or serialize) device state.
+func createDevices(ctx context.Context, tx *sql.Tx) error {
+	for _, stmt := range []string{
+		`CREATE TABLE devices (
+    id           TEXT PRIMARY KEY,
+    user_id      TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    name         TEXT NOT NULL DEFAULT '',
+    os           TEXT NOT NULL DEFAULT '',
+    token_hash   TEXT NOT NULL UNIQUE,
+    created_at   DATETIME NOT NULL DEFAULT (datetime('now')),
+    last_seen_at DATETIME NOT NULL DEFAULT (datetime('now'))
+)`,
+		"CREATE INDEX idx_devices_user ON devices(user_id)",
+		`CREATE TABLE conversation_devices (
+    conversation_id TEXT PRIMARY KEY REFERENCES conversations(id) ON DELETE CASCADE,
+    device_id       TEXT NOT NULL REFERENCES devices(id) ON DELETE CASCADE,
+    work_dir        TEXT NOT NULL,
+    updated_at      DATETIME NOT NULL DEFAULT (datetime('now'))
+)`,
+		"CREATE INDEX idx_conversation_devices_device ON conversation_devices(device_id)",
+	} {
+		if _, err := tx.ExecContext(ctx, stmt); err != nil {
+			return fmt.Errorf("create devices: %w", err)
+		}
+	}
+	return nil
+}

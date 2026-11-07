@@ -583,6 +583,15 @@ export default {
       applyAll: "Do this for conflicts in the remaining {n} files",
     },
   },
+  device: {
+    heading: "Run tools on",
+    server: "Server",
+    serverTitle: "Files and commands run on the DayMug server",
+    boundTitle: "Files and commands run on {name} in {dir}",
+    pickFolder: "Choose a folder on this computer…",
+    notPaired: "This computer is not connected to DayMug yet; try again in a moment",
+    failed: "Could not change where this conversation runs",
+  },
   help: {
     title: "Help",
   },

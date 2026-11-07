@@ -31,6 +31,21 @@ type Store interface {
 	BotStore
 	CronStore
 	MarketplaceStore
+	DeviceStore
+}
+
+// DeviceStore holds paired desktop clients and which conversations run their
+// tools on one.
+type DeviceStore interface {
+	CreateDevice(ctx context.Context, d Device) (Device, error)
+	GetDevice(ctx context.Context, id string) (Device, error)
+	GetDeviceByTokenHash(ctx context.Context, tokenHash string) (Device, error)
+	ListDevices(ctx context.Context, userID string) ([]Device, error)
+	DeleteDevice(ctx context.Context, userID, id string) error
+	TouchDevice(ctx context.Context, id string, at time.Time) error
+	GetConversationDevice(ctx context.Context, conversationID string) (ConversationDevice, error)
+	SetConversationDevice(ctx context.Context, b ConversationDevice) error
+	ClearConversationDevice(ctx context.Context, conversationID string) error
 }
 
 // MaintenanceStore is the database lifecycle: schema init, engine identity,
