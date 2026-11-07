@@ -31,6 +31,10 @@ const props = defineProps<{
   // follows the panel's default target, while this explicit row keeps a
   // new-tab escape hatch available.
   showOpenInNewTab?: boolean;
+  // Browse-only listings (a folder on the user's computer) keep the same
+  // menu but drop every action that would change files: what's left is
+  // open, copy name/path, download a file, and the view toggles.
+  readOnly?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -154,13 +158,15 @@ onUnmounted(() => {
         {{ t("files.menu.openInNewTab") }}
       </button>
       <div class="h-px my-0.5 bg-border" />
-      <button
-        class="ctx-item flex items-center justify-between w-full px-3.5 py-1 bg-transparent text-popover-foreground text-[13px] text-left cursor-pointer hover:bg-accent hover:text-accent-foreground font-[inherit]"
-        @click="emit('cut')"
-      >
-        <span class="flex-1">{{ t("files.menu.cut") }}</span>
-        <span class="text-muted-foreground text-[11px] ml-6">{{ modKey }}X</span>
-      </button>
+      <template v-if="!readOnly">
+        <button
+          class="ctx-item flex items-center justify-between w-full px-3.5 py-1 bg-transparent text-popover-foreground text-[13px] text-left cursor-pointer hover:bg-accent hover:text-accent-foreground font-[inherit]"
+          @click="emit('cut')"
+        >
+          <span class="flex-1">{{ t("files.menu.cut") }}</span>
+          <span class="text-muted-foreground text-[11px] ml-6">{{ modKey }}X</span>
+        </button>
+      </template>
       <!-- "Copy ▸" submenu: the file/folder clipboard copy and the two
            text variants (name / path) now live under one row, so the menu
            stops growing a new top-level entry per variant. The panel is
@@ -181,15 +187,17 @@ onUnmounted(() => {
           class="ctx-submenu-panel absolute top-0 min-w-[120px] bg-popover text-popover-foreground border border-border rounded-md shadow-lg py-0.5 group-hover:block"
           :class="[submenuSideClass, copyAsOpen ? 'block' : 'hidden']"
         >
-          <button
-            class="ctx-submenu-item ctx-item-copy-file flex items-center justify-between w-full px-3.5 py-1 bg-transparent text-popover-foreground text-[13px] text-left cursor-pointer hover:bg-accent hover:text-accent-foreground font-[inherit]"
-            @click="emit('copy')"
-          >
-            <span class="flex-1">{{
-              entry!.is_dir ? t("files.menu.folder") : t("files.menu.file")
-            }}</span>
-            <span class="text-muted-foreground text-[11px] ml-6">{{ modKey }}C</span>
-          </button>
+          <template v-if="!readOnly">
+            <button
+              class="ctx-submenu-item ctx-item-copy-file flex items-center justify-between w-full px-3.5 py-1 bg-transparent text-popover-foreground text-[13px] text-left cursor-pointer hover:bg-accent hover:text-accent-foreground font-[inherit]"
+              @click="emit('copy')"
+            >
+              <span class="flex-1">{{
+                entry!.is_dir ? t("files.menu.folder") : t("files.menu.file")
+              }}</span>
+              <span class="text-muted-foreground text-[11px] ml-6">{{ modKey }}C</span>
+            </button>
+          </template>
           <button
             class="ctx-submenu-item ctx-item-copy-name flex items-center w-full px-3.5 py-1 bg-transparent text-popover-foreground text-[13px] text-left cursor-pointer hover:bg-accent hover:text-accent-foreground font-[inherit]"
             @click="emit('copyName')"
@@ -204,86 +212,93 @@ onUnmounted(() => {
           </button>
         </div>
       </div>
-      <div class="h-px my-0.5 bg-border" />
+      <div v-if="!readOnly || isFile" class="h-px my-0.5 bg-border" />
+      <template v-if="!readOnly">
+        <button
+          class="ctx-item flex items-center justify-between w-full px-3.5 py-1 bg-transparent text-popover-foreground text-[13px] text-left cursor-pointer hover:bg-accent hover:text-accent-foreground font-[inherit]"
+          @click="emit('rename')"
+        >
+          {{ t("files.menu.rename") }}
+        </button>
+        <button
+          class="ctx-item ctx-item-delete flex items-center justify-between w-full px-3.5 py-1 bg-transparent text-destructive text-[13px] text-left cursor-pointer hover:bg-destructive/10 font-[inherit]"
+          :title="t('files.menu.deleteShiftHint', { modifier: modLabel })"
+          @click="emit('delete', $event)"
+        >
+          {{ t("files.menu.delete") }}
+        </button>
+        <div class="h-px my-0.5 bg-border" />
+      </template>
       <button
-        class="ctx-item flex items-center justify-between w-full px-3.5 py-1 bg-transparent text-popover-foreground text-[13px] text-left cursor-pointer hover:bg-accent hover:text-accent-foreground font-[inherit]"
-        @click="emit('rename')"
-      >
-        {{ t("files.menu.rename") }}
-      </button>
-      <button
-        class="ctx-item ctx-item-delete flex items-center justify-between w-full px-3.5 py-1 bg-transparent text-destructive text-[13px] text-left cursor-pointer hover:bg-destructive/10 font-[inherit]"
-        :title="t('files.menu.deleteShiftHint', { modifier: modLabel })"
-        @click="emit('delete', $event)"
-      >
-        {{ t("files.menu.delete") }}
-      </button>
-      <div class="h-px my-0.5 bg-border" />
-      <button
+        v-if="!readOnly || isFile"
         class="ctx-item flex items-center justify-between w-full px-3.5 py-1 bg-transparent text-popover-foreground text-[13px] text-left cursor-pointer hover:bg-accent hover:text-accent-foreground font-[inherit]"
         @click="emit('download')"
       >
         {{ downloadLabel }}
       </button>
       <button
-        v-if="canExtract"
+        v-if="canExtract && !readOnly"
         class="ctx-item ctx-item-extract flex items-center justify-between w-full px-3.5 py-1 bg-transparent text-popover-foreground text-[13px] text-left cursor-pointer hover:bg-accent hover:text-accent-foreground font-[inherit]"
         @click="emit('extract')"
       >
         {{ t("files.menu.extractHere") }}
       </button>
-      <button
-        class="ctx-item ctx-item-compress flex items-center justify-between w-full px-3.5 py-1 bg-transparent text-popover-foreground text-[13px] text-left cursor-pointer hover:bg-accent hover:text-accent-foreground font-[inherit]"
-        @click="emit('compressZip')"
-      >
-        {{ compressLabel }}
-      </button>
-      <button
-        class="ctx-item flex items-center justify-between w-full px-3.5 py-1 bg-transparent text-popover-foreground text-[13px] text-left cursor-pointer hover:bg-accent hover:text-accent-foreground font-[inherit]"
-        @click="emit('properties')"
-      >
-        {{ t("files.menu.properties") }}
-      </button>
+      <template v-if="!readOnly">
+        <button
+          class="ctx-item ctx-item-compress flex items-center justify-between w-full px-3.5 py-1 bg-transparent text-popover-foreground text-[13px] text-left cursor-pointer hover:bg-accent hover:text-accent-foreground font-[inherit]"
+          @click="emit('compressZip')"
+        >
+          {{ compressLabel }}
+        </button>
+        <button
+          class="ctx-item flex items-center justify-between w-full px-3.5 py-1 bg-transparent text-popover-foreground text-[13px] text-left cursor-pointer hover:bg-accent hover:text-accent-foreground font-[inherit]"
+          @click="emit('properties')"
+        >
+          {{ t("files.menu.properties") }}
+        </button>
+      </template>
     </template>
     <template v-else>
-      <button
-        class="ctx-item ctx-item-new-file flex items-center justify-between w-full px-3.5 py-1 bg-transparent text-popover-foreground text-[13px] text-left cursor-pointer hover:bg-accent hover:text-accent-foreground font-[inherit]"
-        @click="emit('newFile')"
-      >
-        {{ t("files.menu.newFile") }}
-      </button>
-      <button
-        class="ctx-item flex items-center justify-between w-full px-3.5 py-1 bg-transparent text-popover-foreground text-[13px] text-left cursor-pointer hover:bg-accent hover:text-accent-foreground font-[inherit]"
-        @click="emit('newFolder')"
-      >
-        {{ t("files.menu.newFolder") }}
-      </button>
-      <!-- Flat "Upload files" / "Upload folder" entries. A native file dialog
+      <template v-if="!readOnly">
+        <button
+          class="ctx-item ctx-item-new-file flex items-center justify-between w-full px-3.5 py-1 bg-transparent text-popover-foreground text-[13px] text-left cursor-pointer hover:bg-accent hover:text-accent-foreground font-[inherit]"
+          @click="emit('newFile')"
+        >
+          {{ t("files.menu.newFile") }}
+        </button>
+        <button
+          class="ctx-item flex items-center justify-between w-full px-3.5 py-1 bg-transparent text-popover-foreground text-[13px] text-left cursor-pointer hover:bg-accent hover:text-accent-foreground font-[inherit]"
+          @click="emit('newFolder')"
+        >
+          {{ t("files.menu.newFolder") }}
+        </button>
+        <!-- Flat "Upload files" / "Upload folder" entries. A native file dialog
            can't offer both files and a folder in one picker, so the two modes
            stay as two rows — but flattened out of the old hover submenu, which
            was fiddly to reach. Picking a folder uploads the folder; picking
            files uploads the files. Selectors kept so callers/tests still match. -->
-      <button
-        class="ctx-item ctx-item-upload-files flex items-center justify-between w-full px-3.5 py-1 bg-transparent text-popover-foreground text-[13px] text-left cursor-pointer hover:bg-accent hover:text-accent-foreground font-[inherit]"
-        @click="emit('upload')"
-      >
-        {{ t("files.menu.uploadFiles") }}
-      </button>
-      <button
-        class="ctx-item ctx-item-upload-folder flex items-center justify-between w-full px-3.5 py-1 bg-transparent text-popover-foreground text-[13px] text-left cursor-pointer hover:bg-accent hover:text-accent-foreground font-[inherit]"
-        @click="emit('uploadFolder')"
-      >
-        {{ t("files.menu.uploadFolder") }}
-      </button>
-      <button
-        v-if="hasClipboard"
-        class="ctx-item flex items-center justify-between w-full px-3.5 py-1 bg-transparent text-popover-foreground text-[13px] text-left cursor-pointer hover:bg-accent hover:text-accent-foreground font-[inherit]"
-        @click="emit('paste')"
-      >
-        <span class="flex-1">{{ t("files.menu.paste") }}</span>
-        <span class="text-muted-foreground text-[11px] ml-6">{{ modKey }}V</span>
-      </button>
-      <div class="h-px my-0.5 bg-border" />
+        <button
+          class="ctx-item ctx-item-upload-files flex items-center justify-between w-full px-3.5 py-1 bg-transparent text-popover-foreground text-[13px] text-left cursor-pointer hover:bg-accent hover:text-accent-foreground font-[inherit]"
+          @click="emit('upload')"
+        >
+          {{ t("files.menu.uploadFiles") }}
+        </button>
+        <button
+          class="ctx-item ctx-item-upload-folder flex items-center justify-between w-full px-3.5 py-1 bg-transparent text-popover-foreground text-[13px] text-left cursor-pointer hover:bg-accent hover:text-accent-foreground font-[inherit]"
+          @click="emit('uploadFolder')"
+        >
+          {{ t("files.menu.uploadFolder") }}
+        </button>
+        <button
+          v-if="hasClipboard"
+          class="ctx-item flex items-center justify-between w-full px-3.5 py-1 bg-transparent text-popover-foreground text-[13px] text-left cursor-pointer hover:bg-accent hover:text-accent-foreground font-[inherit]"
+          @click="emit('paste')"
+        >
+          <span class="flex-1">{{ t("files.menu.paste") }}</span>
+          <span class="text-muted-foreground text-[11px] ml-6">{{ modKey }}V</span>
+        </button>
+        <div class="h-px my-0.5 bg-border" />
+      </template>
       <button
         class="ctx-item ctx-item-toggle-view flex items-center justify-between w-full px-3.5 py-1 bg-transparent text-popover-foreground text-[13px] text-left cursor-pointer hover:bg-accent hover:text-accent-foreground font-[inherit]"
         @click="emit('toggleViewMode')"

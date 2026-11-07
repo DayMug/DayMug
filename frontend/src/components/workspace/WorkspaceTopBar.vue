@@ -18,6 +18,12 @@ defineProps<{
   canDropToParent: boolean;
   canCollapse?: boolean;
   viewMode: "grid" | "list";
+  // A folder on the user's computer (DayMug-Client) is browsed, not managed:
+  // hide the create/upload actions the relay can't carry out.
+  readOnly?: boolean;
+  // Root heading; defaults to "Home". `homeTitle` is its hover text.
+  homeLabel?: string;
+  homeTitle?: string;
 }>();
 
 const emit = defineEmits<{
@@ -48,35 +54,38 @@ const { t } = useI18n();
     <div
       class="flex h-11 items-center gap-[3px] border-b border-[#eeeeee] bg-card px-2 dark:border-border"
     >
-      <button
-        type="button"
-        class="grid size-8 place-items-center rounded-lg text-foreground transition-colors hover:bg-[#efeff1] dark:hover:bg-[#242424]"
-        :aria-label="t('files.menu.newFolder')"
-        data-testid="workspace-new-folder"
-        @click="emit('new-folder')"
-      >
-        <FolderPlus :size="18" />
-      </button>
-      <button
-        type="button"
-        class="grid size-8 place-items-center rounded-lg text-foreground transition-colors hover:bg-[#efeff1] dark:hover:bg-[#242424]"
-        :aria-label="t('files.menu.newFile')"
-        data-testid="workspace-new-file"
-        @click="emit('new-file')"
-      >
-        <FilePlus2 :size="18" />
-      </button>
-      <span class="mx-0.5 h-3.5 w-px bg-[#dddddd] dark:bg-border" aria-hidden="true" />
-      <button
-        type="button"
-        class="grid size-8 place-items-center rounded-lg text-foreground transition-colors hover:bg-[#efeff1] dark:hover:bg-[#242424]"
-        :aria-label="t('files.menu.uploadFiles')"
-        data-testid="workspace-upload"
-        @click="emit('upload')"
-      >
-        <Upload :size="18" />
-      </button>
-      <span class="mx-0.5 h-3.5 w-px bg-[#dddddd] dark:bg-border" aria-hidden="true" />
+      <slot name="leading" />
+      <template v-if="!readOnly">
+        <button
+          type="button"
+          class="grid size-8 place-items-center rounded-lg text-foreground transition-colors hover:bg-[#efeff1] dark:hover:bg-[#242424]"
+          :aria-label="t('files.menu.newFolder')"
+          data-testid="workspace-new-folder"
+          @click="emit('new-folder')"
+        >
+          <FolderPlus :size="18" />
+        </button>
+        <button
+          type="button"
+          class="grid size-8 place-items-center rounded-lg text-foreground transition-colors hover:bg-[#efeff1] dark:hover:bg-[#242424]"
+          :aria-label="t('files.menu.newFile')"
+          data-testid="workspace-new-file"
+          @click="emit('new-file')"
+        >
+          <FilePlus2 :size="18" />
+        </button>
+        <span class="mx-0.5 h-3.5 w-px bg-[#dddddd] dark:bg-border" aria-hidden="true" />
+        <button
+          type="button"
+          class="grid size-8 place-items-center rounded-lg text-foreground transition-colors hover:bg-[#efeff1] dark:hover:bg-[#242424]"
+          :aria-label="t('files.menu.uploadFiles')"
+          data-testid="workspace-upload"
+          @click="emit('upload')"
+        >
+          <Upload :size="18" />
+        </button>
+        <span class="mx-0.5 h-3.5 w-px bg-[#dddddd] dark:bg-border" aria-hidden="true" />
+      </template>
       <button
         type="button"
         class="grid size-8 place-items-center rounded-lg text-foreground transition-colors hover:bg-[#efeff1] dark:hover:bg-[#242424]"
@@ -136,10 +145,10 @@ const { t } = useI18n();
         <FolderOpen :size="17" class="shrink-0 text-[#2c2c2c] dark:text-foreground" />
         <button
           class="home-btn shrink-0 rounded px-0.5 text-[14px] font-semibold text-[#2c2c2c] transition-colors hover:bg-[#ececec] dark:text-foreground dark:hover:bg-[#242424]"
-          :title="t('workspace.home')"
+          :title="homeTitle ?? t('workspace.home')"
           @click="emit('navigate', '.')"
         >
-          {{ t("workspace.home") }}
+          {{ homeLabel ?? t("workspace.home") }}
         </button>
         <div
           class="ws-breadcrumbs flex min-w-0 flex-1 items-center gap-1 overflow-x-auto text-[12px] text-[#999999]"
