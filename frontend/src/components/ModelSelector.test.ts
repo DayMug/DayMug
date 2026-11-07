@@ -4,6 +4,7 @@ import ModelSelector from "./ModelSelector.vue";
 import { invalidateModelRegistry, loadModelRegistry } from "@/composables/useModelRegistry";
 import type { Conversation } from "@/composables/apiTypes";
 import { RECENT_MODEL_STORAGE_KEY } from "@/lib/recentModel";
+import { AGENT_PREFS_STORAGE_KEY, loadAgentPrefs } from "@/lib/agentPrefs";
 
 const fetchModelsMock = vi.fn();
 const updateConversationModelMock = vi.fn();
@@ -147,6 +148,7 @@ beforeEach(() => {
   updateConversationModelMock.mockReset();
   fetchModelsMock.mockResolvedValue(registry);
   localStorage.removeItem(RECENT_MODEL_STORAGE_KEY);
+  localStorage.removeItem(AGENT_PREFS_STORAGE_KEY);
 });
 
 describe("ModelSelector", () => {
@@ -314,6 +316,14 @@ describe("ModelSelector", () => {
         think_level: "high",
       }),
     );
+    // And under the conversation's agent, so that agent's next conversation
+    // starts on this profile regardless of what other agents picked since.
+    expect(loadAgentPrefs("u1").model).toEqual({
+      provider: "claude",
+      model: "claude-sonnet-5",
+      account: "default",
+      think_level: "high",
+    });
   });
 
   it("closes the menu once a model is picked", async () => {

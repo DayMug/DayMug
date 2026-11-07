@@ -116,6 +116,16 @@ vi.mock("./useApi", () => ({
   updateConversationWorkDir: vi.fn().mockResolvedValue({}),
 }));
 
+const mockFetchCurrentDevice = vi.fn();
+const mockSetConversationDevice = vi.fn();
+vi.mock("./apiDevices", () => ({
+  fetchCurrentDevice: (...args: unknown[]) => mockFetchCurrentDevice(...args),
+  pairDevice: vi.fn(),
+  setConversationDevice: (...args: unknown[]) => mockSetConversationDevice(...args),
+  fetchConversationDevice: vi.fn().mockResolvedValue(null),
+  clearConversationDevice: vi.fn(),
+}));
+
 vi.mock("./useWebSocket", () => ({
   useWebSocket: () => ({
     isConnected: { value: true },
@@ -132,6 +142,8 @@ import { useConversations } from "./useConversations";
 import { resetActiveConversationStore } from "@/stores/activeConversationStore";
 import { resetConversationListStore } from "@/stores/conversationListStore";
 import { RECENT_MODEL_STORAGE_KEY } from "@/lib/recentModel";
+import { AGENT_PREFS_STORAGE_KEY } from "@/lib/agentPrefs";
+import { useConversationDevice } from "./useConversationDevice";
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -1040,6 +1052,115 @@ describe("useConversations", () => {
       "codex-qwen",
       undefined,
     );
+  });
+
+  it("startNewConversation prefers the agent's own last model over the browser-wide one", async () => {
+    vi.mocked(localStorage.getItem).mockImplementation((key: string) => {
+      if (key === RECENT_MODEL_STORAGE_KEY) {
+        return JSON.stringify({ provider: "codex", model: "gpt-5.5" });
+      }
+      if (key === AGENT_PREFS_STORAGE_KEY) {
+        return JSON.stringify({
+          u1: {
+            model: {
+              provider: "claude",
+              model: "claude-sonnet-5",
+              account: "work",
+              think_level: "high",
+            },
+          },
+        });
+      }
+      return null;
+    });
+
+    const { startNewConversation } = useConversations();
+    await startNewConversation("u1");
+
+    expect(mockCreateConversation).toHaveBeenCalledWith(
+      "u1",
+      undefined,
+      "claude",
+      "claude-sonnet-5",
+      "work",
+      "high",
+    );
+    expect(mockSetConversationDevice).not.toHaveBeenCalled();
+  });
+
+  it("startNewConversation uses the browser-wide model for an agent without its own memory", async () => {
+    vi.mocked(localStorage.getItem).mockImplementation((key: string) => {
+      if (key === RECENT_MODEL_STORAGE_KEY) {
+        return JSON.stringify({ provider: "codex", model: "gpt-5.5" });
+      }
+      if (key === AGENT_PREFS_STORAGE_KEY) {
+        return JSON.stringify({ other: { model: { provider: "claude", model: "m" } } });
+      }
+      return null;
+    });
+
+    const { startNewConversation } = useConversations();
+    await startNewConversation("u1");
+
+    expect(mockCreateConversation).toHaveBeenCalledWith(
+      "u1",
+      undefined,
+      "codex",
+      "gpt-5.5",
+      undefined,
+      undefined,
+    );
+  });
+
+  it("startNewConversation rebinds the agent's last folder inside the same DayMug-Client", async () => {
+    window.__DAYMUG_CLIENT__ = { nonce: "n".repeat(40), os: "macos", hostname: "mbp" };
+    mockFetchCurrentDevice.mockResolvedValue({ id: "d1", name: "mbp", online: true });
+    const binding = {
+      device_id: "d1",
+      device_name: "mbp",
+      work_dir: "/Users/a/proj",
+      online: true,
+    };
+    mockSetConversationDevice.mockResolvedValue(binding);
+    vi.mocked(localStorage.getItem).mockImplementation((key: string) =>
+      key === AGENT_PREFS_STORAGE_KEY
+        ? JSON.stringify({
+            u1: { location: { kind: "device", device_id: "d1", work_dir: "/Users/a/proj" } },
+          })
+        : null,
+    );
+    try {
+      const { startNewConversation } = useConversations();
+      await startNewConversation("u1");
+
+      expect(mockSetConversationDevice).toHaveBeenCalledWith("conv-new", "d1", "/Users/a/proj");
+      expect(useConversationDevice(() => "conv-new").value).toEqual(binding);
+    } finally {
+      delete window.__DAYMUG_CLIENT__;
+    }
+  });
+
+  it("startNewConversation leaves a folder bound to another computer alone", async () => {
+    window.__DAYMUG_CLIENT__ = { nonce: "n".repeat(40), os: "macos", hostname: "mbp" };
+    mockFetchCurrentDevice.mockResolvedValue({ id: "d1", name: "mbp", online: true });
+    vi.mocked(localStorage.getItem).mockImplementation((key: string) =>
+      key === AGENT_PREFS_STORAGE_KEY
+        ? JSON.stringify({
+            u1: {
+              location: { kind: "device", device_id: "d-elsewhere", work_dir: "/Users/a/proj" },
+            },
+          })
+        : null,
+    );
+    try {
+      const { startNewConversation, conversations } = useConversations();
+      await startNewConversation("u1");
+
+      expect(mockSetConversationDevice).not.toHaveBeenCalled();
+      expect(conversations.value[0]?.id).toBe("conv-new");
+    } finally {
+      delete window.__DAYMUG_CLIENT__;
+    }
   });
 
   it("startNewConversation falls back to server defaults when the remembered model is rejected", async () => {

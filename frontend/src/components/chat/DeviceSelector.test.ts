@@ -14,6 +14,7 @@ const api = vi.hoisted(() => ({
 vi.mock("@/composables/apiDevices", () => api);
 
 import DeviceSelector from "./DeviceSelector.vue";
+import { loadAgentPrefs } from "@/lib/agentPrefs";
 
 const device = {
   id: "d1",
@@ -27,7 +28,7 @@ const device = {
 function mountSelector(conversationStarted = false) {
   const i18n = createI18n({ legacy: false, locale: "en", messages: { en } });
   return mount(DeviceSelector, {
-    props: { conversationId: "c1", conversationStarted },
+    props: { conversationId: "c1", agentId: "agent-1", conversationStarted },
     global: { plugins: [i18n] },
     attachTo: document.body,
   });
@@ -71,6 +72,11 @@ describe("DeviceSelector", () => {
     expect(JSON.parse(localStorage.getItem("daymug.desktop.recentDirs") ?? "[]")).toEqual([
       "/Users/alice/proj",
     ]);
+    expect(loadAgentPrefs("agent-1").location).toEqual({
+      kind: "device",
+      device_id: "d1",
+      work_dir: "/Users/alice/proj",
+    });
     wrapper.unmount();
   });
 
@@ -89,6 +95,7 @@ describe("DeviceSelector", () => {
     await flushPromises();
     expect(api.clearConversationDevice).toHaveBeenCalledWith("c1");
     expect(wrapper.get('[data-testid="device-selector-label"]').text()).toBe("Server");
+    expect(loadAgentPrefs("agent-1").location).toEqual({ kind: "server" });
     wrapper.unmount();
   });
 
