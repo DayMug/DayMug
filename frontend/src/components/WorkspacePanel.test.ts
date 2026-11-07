@@ -1029,32 +1029,6 @@ describe("WorkspacePanel", () => {
     );
   });
 
-  it("rejects folder uploads with more than 10 files and surfaces a zip hint", async () => {
-    const wrapper = mountPanelSync({ props: { userId: "u1" } });
-    await flushPromises();
-
-    const tooMany = Array.from({ length: 11 }, (_, i) => {
-      const f = new File(["x"], `bigfolder/file-${i}.txt`, { type: "text/plain" });
-      // happy-dom drops webkitRelativePath when File is constructed manually;
-      // the helper falls back to `name`, but set it anyway so this stays
-      // representative of how the folder picker hands files to us.
-      Object.defineProperty(f, "webkitRelativePath", {
-        value: `bigfolder/file-${i}.txt`,
-        configurable: true,
-      });
-      return f;
-    });
-
-    await wrapper.find(".ws-body").trigger("drop", {
-      preventDefault: vi.fn(),
-      dataTransfer: { items: [], files: tooMany },
-    });
-    await flushPromises();
-
-    expect(mockUploadFiles).not.toHaveBeenCalled();
-    expect(wrapper.find(".ws-error").text()).toContain("zip");
-  });
-
   it("renders the upload progress bar while an upload is in flight", async () => {
     // Wrap the resolver in an object so TS5's narrowing doesn't collapse the
     // captured-by-closure ref to `never` after assignment in the mock.

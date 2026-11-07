@@ -70,6 +70,9 @@ func TestDeviceLifecycle(t *testing.T) {
 			if err := s.SetConversationDevice(ctx, store.ConversationDevice{ConversationID: "c1", DeviceID: "d1", WorkDir: "/a"}); err != nil {
 				t.Fatalf("rebind: %v", err)
 			}
+			if ids, err := s.ListDeviceConversations(ctx, "d1"); err != nil || len(ids) != 1 || ids[0] != "c1" {
+				t.Fatalf("device conversations = %v, %v", ids, err)
+			}
 			if err := s.DeleteDevice(ctx, "someone-else", "d1"); !errors.Is(err, store.ErrNotFound) {
 				t.Fatalf("foreign delete err = %v", err)
 			}
@@ -78,6 +81,9 @@ func TestDeviceLifecycle(t *testing.T) {
 			}
 			if _, err := s.GetConversationDevice(ctx, "c1"); !errors.Is(err, store.ErrNotFound) {
 				t.Fatalf("binding survived revoke: %v", err)
+			}
+			if ids, _ := s.ListDeviceConversations(ctx, "d1"); len(ids) != 0 {
+				t.Fatalf("revoked device still lists %v", ids)
 			}
 			if _, err := s.GetDeviceByTokenHash(ctx, "hash1"); !errors.Is(err, store.ErrNotFound) {
 				t.Fatalf("revoked token still resolves: %v", err)

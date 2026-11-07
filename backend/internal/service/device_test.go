@@ -374,3 +374,32 @@ func TestApplyDeviceRouteServesNativeToolTransports(t *testing.T) {
 		t.Fatalf("unbound call = %s", raw)
 	}
 }
+
+// A conversation bound to a computer accepts prompts only from the page that
+// client hosts — also while the client is briefly disconnected — and an
+// unbound conversation accepts them from anywhere.
+func TestDeviceCheckSender(t *testing.T) {
+	s, h := deviceFixture(t)
+	ctx := context.Background()
+	if err := h.CheckSender(ctx, s, "c1", ""); err != nil {
+		t.Fatalf("unbound conversation refused a browser: %v", err)
+	}
+	d, _ := s.CreateDevice(ctx, store.Device{ID: "d1", UserID: "h1", TokenHash: "x"})
+	if err := s.SetConversationDevice(ctx, store.ConversationDevice{ConversationID: "c1", DeviceID: d.ID, WorkDir: "/w"}); err != nil {
+		t.Fatal(err)
+	}
+	client := connect(h, d, DeviceHello{Nonce: testNonce}, nil)
+	other := "other-0123456789abcdef0123456789abcdef"
+	for _, nonce := range []string{"", other} {
+		if err := h.CheckSender(ctx, s, "c1", nonce); !errors.Is(err, ErrConversationOnDevice) {
+			t.Fatalf("nonce %q err = %v, want ErrConversationOnDevice", nonce, err)
+		}
+	}
+	if err := h.CheckSender(ctx, s, "c1", testNonce); err != nil {
+		t.Fatalf("hosting page refused: %v", err)
+	}
+	client.session.Close()
+	if err := h.CheckSender(ctx, s, "c1", testNonce); err != nil {
+		t.Fatalf("hosting page refused while its client is reconnecting: %v", err)
+	}
+}

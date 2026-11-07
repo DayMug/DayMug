@@ -95,7 +95,7 @@ Each agent has a full configuration profile that controls Agent SDK / app-server
 | Watch | Live change notifications (falls back to polling if unavailable) | `GET /api/users/:id/files/watch` |
 | Download file | Download single file with proper Content-Disposition | `GET /api/users/:id/files/download?path=` |
 | Download as zip | Download directory as zip archive | `GET /api/users/:id/files/download-zip?path=` |
-| Upload files | Upload files to a directory (supports folder uploads with relative paths, conflict check first) | `POST /api/users/:id/files/upload?path=`, `/files/upload/check` |
+| Upload files | Upload files to a directory (supports folder uploads with relative paths, conflict check first; no size or file-count limit) | `POST /api/users/:id/files/upload?path=`, `/files/upload/check` |
 | Rename / move / copy | With conflict detection; copies get auto-dedup names ("file (copy).txt") | `PUT /files/rename`, `PUT /files/move`, `POST /files/copy` |
 | Delete file/dir | Remove file or directory (recursive) | `DELETE /api/users/:id/files?path=` |
 | Create directory | Create new directory (with intermediate dirs) | `POST /api/users/:id/files/mkdir` |
@@ -160,7 +160,9 @@ Desktop is a three-pane workspace: a slim agent rail, the conversation list, the
 
 | Aspect | Behaviour |
 |--------|-----------|
-| Scope | Inside the desktop app only; a browser shows and requests nothing device-related |
+| Scope | Inside the desktop app only; a browser only reads a conversation's binding, to show a bound conversation as view-only |
+| One driver | A bound conversation is driven only from the client on that computer; a browser or another computer sees it view-only (no composer, no file panel), and the server refuses their prompts |
+| Closing | Closing or quitting the client while one of its bound conversations is running asks first; otherwise it closes at once |
 | Pairing | Silent: the logged-in page vouches for the client hosting it via a per-launch nonce |
 | Run location | Per conversation: server (default) or a folder on this computer, picked with the native dialog; recent folders one click away |
 | Tools on the device | Bash / Read / Write / Edit / Glob / Grep over an outbound WebSocket; server-side file and shell built-ins are removed for that conversation; runs automatically, no approval step |

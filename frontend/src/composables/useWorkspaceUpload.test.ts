@@ -209,15 +209,15 @@ describe("useWorkspaceUpload", () => {
     expect(upload.uploadCancelled.value).toBe(false);
   });
 
-  it("rejects folder uploads exceeding the per-folder file limit", async () => {
+  it("uploads a folder of any size", async () => {
     const { upload, uploadFiles, error } = setup();
     // Drag-drop traversal encodes the folder path into the synthetic name.
-    const files = Array.from({ length: 11 }, (_, i) => new File(["x"], `dir/f${i}.txt`));
+    const files = Array.from({ length: 50 }, (_, i) => new File(["x"], `dir/f${i}.txt`));
 
     await upload.performUpload(".", files);
 
-    expect(uploadFiles).not.toHaveBeenCalled();
-    expect(error.value).toContain('Folder "dir"');
+    expect(uploadFiles).toHaveBeenCalledTimes(50);
+    expect(error.value).toBe("");
   });
 
   it("handleUploadInput uploads picked files and clears the input", async () => {

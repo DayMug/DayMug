@@ -46,6 +46,7 @@ type DeviceStore interface {
 	GetConversationDevice(ctx context.Context, conversationID string) (ConversationDevice, error)
 	SetConversationDevice(ctx context.Context, b ConversationDevice) error
 	ClearConversationDevice(ctx context.Context, conversationID string) error
+	ListDeviceConversations(ctx context.Context, deviceID string) ([]string, error)
 }
 
 // MaintenanceStore is the database lifecycle: schema init, engine identity,

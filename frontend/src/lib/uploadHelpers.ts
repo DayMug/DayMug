@@ -1,40 +1,5 @@
 import { i18n } from "@/i18n";
 
-// Per-top-level-folder file count.
-// `webkitRelativePath` (folder picker) and the synthetic `name` we set during
-// drag-drop traversal both encode the path as `<top>/<sub>/.../file`. Files
-// outside any folder (single-file picks) are skipped — the 10-file limit only
-// applies to folder uploads.
-export function countFilesPerTopFolder(
-  files: { webkitRelativePath?: string; name: string }[],
-): Map<string, number> {
-  const counts = new Map<string, number>();
-  for (const f of files) {
-    const path = f.webkitRelativePath || f.name;
-    const slash = path.indexOf("/");
-    if (slash <= 0) continue;
-    const top = path.slice(0, slash);
-    counts.set(top, (counts.get(top) ?? 0) + 1);
-  }
-  return counts;
-}
-
-export const FOLDER_FILE_LIMIT = 10;
-
-// Returns a localized message when any uploaded folder exceeds the limit, or null.
-export function checkFolderFileLimit(
-  files: { webkitRelativePath?: string; name: string }[],
-  limit: number = FOLDER_FILE_LIMIT,
-): string | null {
-  const counts = countFilesPerTopFolder(files);
-  for (const [name, count] of counts) {
-    if (count > limit) {
-      return `Folder "${name}" contains ${count} files (including subdirectories), exceeding the limit of ${limit}. Please compress it to a zip before uploading.`;
-    }
-  }
-  return null;
-}
-
 export function formatBytes(bytes: number): string {
   if (!Number.isFinite(bytes) || bytes < 0) return "0 B";
   if (bytes < 1024) return `${bytes} B`;

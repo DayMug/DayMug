@@ -197,7 +197,11 @@ func (b *routeBuilder) registerPublicRoutes() {
 // session cookie, so they sit on the public group.
 func (b *routeBuilder) registerDeviceRoutes() {
 	h := &DeviceHandler{Store: b.store, Hub: b.rt.Devices, Version: b.opts.CurrentVersion}
+	if b.rt.Broadcaster != nil {
+		h.Busy = b.rt.Broadcaster.IsBusy
+	}
 	b.api.POST("/devices/claim", h.Claim)
+	b.api.GET("/devices/activity", h.Activity)
 	b.api.GET("/devices/connect", h.Connect)
 	b.api.Any("/devices/mcp", h.MCP)
 	b.authed.GET("/devices", h.List)

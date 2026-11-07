@@ -1,7 +1,6 @@
 import { computed, getCurrentScope, onScopeDispose, type Ref } from "vue";
 import type { Router } from "vue-router";
 import { UploadConflictError, type UploadOptions } from "@/composables/useFileApi";
-import { checkFolderFileLimit } from "@/lib/uploadHelpers";
 import { errorMessage } from "@/lib/errorMessage";
 import { useConfirm } from "@/composables/useConfirm";
 import { i18n } from "@/i18n";
@@ -145,9 +144,8 @@ export function useWorkspaceUpload({
   }
 
   // Single upload pipeline shared by every entry point (file picker, folder
-  // picker, drag-drop on background, drag-drop on a folder card). It rejects
-  // folder uploads that exceed the per-folder file cap, sums the byte total
-  // up front, and pumps progress + rolling-average speed into uploadProgress
+  // picker, drag-drop on background, drag-drop on a folder card). It sums the
+  // byte total up front, and pumps progress + rolling-average speed into uploadProgress
   // so the bottom progress bar can render.
   //
   // Files are uploaded one at a time. This makes Cancel cleanly granular:
@@ -160,11 +158,6 @@ export function useWorkspaceUpload({
   // all keep describing one pipeline. The call then returns immediately.
   async function performUpload(targetPath: string, files: File[]): Promise<void> {
     if (files.length === 0) return;
-    const limitMsg = checkFolderFileLimit(files);
-    if (limitMsg) {
-      error.value = limitMsg;
-      return;
-    }
     // Each file is pinned to the agent whose panel it was dropped on: the
     // run may outlive several agent switches.
     // A new run replaces the previous run's finished list.

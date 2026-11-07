@@ -168,7 +168,7 @@ func (h *TerminalHandler) dispatchClientFrame(
 	case "init":
 		h.handleInitMsg(ctx, msg, state, clientID, sendCh, writeJSON)
 	case "input":
-		if !matchesSubscription(msg, state, writeJSON) {
+		if !matchesSubscription(msg, state, writeJSON) || !h.senderMayDrive(ctx, state, writeJSON) {
 			return
 		}
 		h.handleInputMsg(ctx, msg, state, writeJSON, broadcastExceptSelf)
@@ -183,7 +183,7 @@ func (h *TerminalHandler) dispatchClientFrame(
 		}
 		h.handleCancelScheduledMsg(ctx, msg, state, writeJSON)
 	case "question_response":
-		if !matchesSubscription(msg, state, writeJSON) {
+		if !matchesSubscription(msg, state, writeJSON) || !h.senderMayDrive(ctx, state, writeJSON) {
 			return
 		}
 		h.handleQuestionResponse(ctx, msg, state, writeJSON)
@@ -253,6 +253,26 @@ func (h *TerminalHandler) answerSuspendedQuestion(ctx context.Context, msg clien
 				h.Broadcaster.Broadcast(convID, data)
 			}
 		})
+}
+
+// senderMayDrive keeps a conversation bound to a computer folder read-only
+// everywhere except in the DayMug-Client running on that computer, so a
+// browser tab can't start turns that interleave with the ones driven there.
+func (h *TerminalHandler) senderMayDrive(ctx context.Context, state *connState, writeJSON func(serverMessage)) bool {
+	if h.Devices == nil || h.Store == nil || state.conversationID == "" {
+		return true
+	}
+	err := h.Devices.CheckSender(ctx, h.Store, state.conversationID, state.deviceNonce)
+	if err == nil {
+		return true
+	}
+	writeJSON(serverMessage{
+		Type:           "error",
+		Message:        service.ErrConversationOnDevice.Message(),
+		ConversationID: state.conversationID,
+		SubscriptionID: state.subscriptionID,
+	})
+	return false
 }
 
 // matchesSubscription rejects frames aimed at a conversation/subscription this
@@ -498,6 +518,7 @@ func (h *TerminalHandler) handleInitMsg(
 	}
 	state.conversationID = msg.ConversationID
 	state.subscriptionID = msg.SubscriptionID
+	state.deviceNonce = msg.DeviceNonce
 	// These values belong to the previous init and must never leak across an
 	// agent/conversation switch if a lookup below fails or returns no workdir.
 	state.userWorkDir = ""

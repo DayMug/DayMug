@@ -43,6 +43,7 @@ import {
 } from "@/lib/wsProtocol";
 import { saveCachedRateLimits } from "@/lib/rateLimitCache";
 import { notifyBrowserTask } from "../useBrowserNotifications";
+import { DEVICE_CONVERSATION_REFUSAL, loadConversationDevice } from "../useConversationDevice";
 import {
   conversationAccount,
   conversationProvider,
@@ -1168,6 +1169,7 @@ const NON_FATAL_ERROR_MESSAGES = new Set([
   "the user question is no longer active",
   "invalid scheduled time",
   "failed to schedule prompt",
+  DEVICE_CONVERSATION_REFUSAL,
 ]);
 
 function handleError(msg: WSErrorFrame) {
@@ -1185,6 +1187,11 @@ function handleError(msg: WSErrorFrame) {
     return;
   }
   isAnsweringUserQuestion.value = false;
+  // Another computer took this conversation over since its binding was read:
+  // re-read it so the composer locks instead of refusing every send.
+  if (msg.message === DEVICE_CONVERSATION_REFUSAL) {
+    void loadConversationDevice(msg.conversation_id ?? currentConversationId.value);
+  }
   // Server sends MessageID when the error row was persisted to
   // the DB. Skip the visible push if we already have that id
   // (REST sync delivered it first). Persist-time-only errors

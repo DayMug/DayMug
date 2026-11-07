@@ -288,8 +288,9 @@ By default DayMug only listens for plain HTTP on `127.0.0.1:<port>`. For externa
        ssl_certificate_key /etc/letsencrypt/live/chat.example.com/privkey.pem;
 
        # nginx defaults to 1m, which rejects most uploads with 413. DayMug
-       # accepts 25 MiB per chat attachment and 200 MiB per file-browser upload.
-       client_max_body_size 200m;
+       # itself puts no size limit on chat attachments or file-browser uploads;
+       # 0 disables nginx's limit too.
+       client_max_body_size 0;
 
        location / {
            proxy_pass http://127.0.0.1:8090;
@@ -312,11 +313,11 @@ By default DayMug only listens for plain HTTP on `127.0.0.1:<port>`. For externa
    ```
 4. On Linux run `sudo nginx -t && sudo systemctl reload nginx`. On macOS, if you manage TLS/reverse proxy yourself, reload according to your nginx/acme setup.
 
-> ⚠️ Raise `client_max_body_size` (200m above). nginx's default is 1 MB, so without it attachments and file-browser uploads fail with `413 Request Entity Too Large` — other proxies need an equivalent body-size limit of at least 200 MB.
+> ⚠️ Raise or disable `client_max_body_size` (`0` above). nginx's default is 1 MB, so without it attachments and file-browser uploads fail with `413 Request Entity Too Large`. DayMug has no upload size or file-count limit of its own, so whatever body-size limit your proxy keeps is the effective cap.
 
 > ⚠️ Chat runs over WebSocket, so the `Upgrade`/`Connection` headers and a long `proxy_read_timeout` (≥3600s) are mandatory. The `proxy_set_header X-Forwarded-Proto $scheme` line above also decides whether the session cookie carries `Secure`: when forwarded, it is set automatically; only if your proxy does not forward it do you need to set `auth.cookie_secure` to `true` explicitly.
 
-> Self-hosted tunnels (e.g. frp, Tailscale Funnel, your own cloudflared) work too, with the same requirements: keep the WebSocket upgrade, the long read timeout, and a body-size limit of at least 200 MB. Set `server.public_url` in `config.yaml` to the public address so deep links in push notifications (Bark) open correctly.
+> Self-hosted tunnels (e.g. frp, Tailscale Funnel, your own cloudflared) work too, with the same requirements: keep the WebSocket upgrade, the long read timeout, and a body-size limit as large as the uploads you need (or none). Set `server.public_url` in `config.yaml` to the public address so deep links in push notifications (Bark) open correctly.
 
 ### Path B — local machine / LAN only
 

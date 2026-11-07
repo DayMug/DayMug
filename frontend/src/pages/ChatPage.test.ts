@@ -206,6 +206,17 @@ vi.mock("@/composables/useTheme", async () => {
 
 const mockListDir = vi.fn().mockResolvedValue({ path: ".", entries: [] });
 
+// The page reads the conversation's computer binding in every environment;
+// a plain browser (no client marker) gets null unless a test binds it.
+const mockFetchConversationDevice = vi.fn();
+vi.mock("@/composables/apiDevices", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/composables/apiDevices")>();
+  return {
+    ...actual,
+    fetchConversationDevice: (id: string) => mockFetchConversationDevice(id),
+  };
+});
+
 vi.mock("@/composables/useFileApi", () => ({
   // Re-exported alongside useFileApi; the preview surface and the open-file
   // routing import it directly, so the mock has to carry it too.
@@ -226,6 +237,7 @@ vi.mock("@/composables/useFileApi", () => ({
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mockFetchConversationDevice.mockResolvedValue(null);
   chatMessages.value = [];
   isThinking.value = false;
   backgroundConversationIds.value = [];
@@ -251,6 +263,34 @@ beforeEach(() => {
 });
 
 describe("ChatPage", () => {
+  it("makes a conversation bound to a computer view-only in a browser, without a file panel", async () => {
+    mockFetchConversationDevice.mockResolvedValue({
+      device_id: "d1",
+      device_name: "laptop",
+      work_dir: "/Users/a/proj",
+      online: true,
+    });
+    currentConversationId.value = "c-bound";
+    const wrapper = mountChatPage();
+    await flushPromises();
+
+    expect(mockFetchConversationDevice).toHaveBeenCalledWith("c-bound");
+    const textarea = wrapper.get("textarea");
+    expect(textarea.attributes("disabled")).toBeDefined();
+    expect(textarea.attributes("placeholder")).toContain("laptop");
+    expect(wrapper.find(".workspace-panel").exists()).toBe(false);
+    expect(wrapper.find('[data-testid="workspace-resize-handle"]').exists()).toBe(false);
+  });
+
+  it("keeps an unbound conversation writable in a browser", async () => {
+    currentConversationId.value = "c-server";
+    const wrapper = mountChatPage();
+    await flushPromises();
+
+    expect(wrapper.get("textarea").attributes("disabled")).toBeUndefined();
+    expect(wrapper.find(".workspace-panel").exists()).toBe(true);
+  });
+
   it("renders chat and workspace panels", () => {
     const wrapper = mountChatPage();
     expect(wrapper.find(".chat-panel").exists()).toBe(true);

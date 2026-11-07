@@ -2,7 +2,7 @@
 
 [DayMug-Client](https://github.com/ifconfiger/DayMug-Client) is a Tauri app that shows the DayMug web UI in a native window and lets a conversation **run its file and shell tools on that computer**. The agent itself keeps running on the server — model credentials, session logs, billing and history never leave it; only the tools move.
 
-In a plain browser nothing of this exists: no selector, no request, no extra tool or prompt. Everything below is gated on a marker only the desktop client injects.
+In a plain browser nothing of this exists: no selector, no extra tool or prompt. Everything below is gated on a marker only the desktop client injects; the one exception is that every page reads a conversation's binding, so a browser can show a computer-bound conversation as view-only.
 
 ## Using it
 
@@ -12,6 +12,10 @@ In a plain browser nothing of this exists: no selector, no request, no extra too
 4. In a conversation, the composer shows a **run location** selector next to the model picker. Pick **Choose a folder on this computer…**: a native folder dialog opens; the conversation is now bound to that folder. Switch back to **Server** at any time.
 
 A bound conversation's Read / Write / Edit / Glob / Grep / Bash calls execute on the computer, in the chosen folder, with the user's own permissions and no confirmation prompt (phase 1 runs every task automatically). Tool cards render exactly like the built-in ones.
+
+A bound conversation can be driven only from the DayMug-Client on that computer. Opened anywhere else — a plain browser, or the client on another computer — it is **view-only**: the transcript streams live, but the composer, question cards, queue controls and the file panel are hidden, and the chat socket refuses `input` / `question_response` frames from any page whose `init` did not carry that client's nonce (`device_nonce`). Two senders would otherwise interleave turns on the same folder.
+
+Closing the client's window (or quitting) while one of its bound conversations has a turn running asks for confirmation first: the turn keeps running on the server but every later tool call would fail. With nothing running, no binding, or no reachable server, the window closes right away. The client asks `GET /api/devices/activity` (device token) for the running list.
 
 The right-hand file panel follows the binding: it browses the chosen folder on the computer (folders, text and image previews, download) instead of the server workspace. It is read-only; switching back to **Server** restores the regular workspace panel.
 

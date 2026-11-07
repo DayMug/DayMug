@@ -22,9 +22,9 @@ import (
 
 type FileHandler struct {
 	Store store.Store
-	// UploadMaxBytes caps one file-browser upload request. Set per-handler so
-	// tests can shrink it instead of having to POST hundreds of megabytes;
-	// zero means fileBrowserUploadMaxBytes. Mirrors UploadHandler.MaxBytes.
+	// UploadMaxBytes optionally caps one file-browser upload request. Zero (the
+	// production value) means no cap; tests set it to exercise the 413 path.
+	// Mirrors UploadHandler.MaxBytes.
 	UploadMaxBytes int64
 	// Watcher backs the /watch WebSocket. Optional: a nil watcher means
 	// fsnotify was unavailable at boot, and the endpoint tells clients so

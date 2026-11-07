@@ -183,6 +183,7 @@ Used only by DayMug-Client and the page it hosts; see [guides/desktop-client.md]
 | GET | `/devices` | The caller's devices with `online` / `hostname` / `version` |
 | DELETE | `/devices/:id` | Revoke a device: drops its socket and its conversation bindings |
 | POST | `/devices/pair` | `{nonce, name, os}` from the page inside the client; 202 |
+| GET | `/devices/activity` | Public, `Authorization: Bearer <device token>`. `{running: [{id, title}]}`: the device's bound conversations with a turn in flight (the client's close warning) |
 | GET | `/devices/current?nonce=` | `{device}` hosting this page, or `{device: null}` |
 | POST | `/devices/:id/pick-folder` | Opens the native folder dialog on the device; `{path}` (empty when cancelled) |
 | GET/PUT/DELETE | `/conversations/:id/device` | Read / set `{device_id, work_dir}` (device must be online; the folder is canonicalised on it) / clear the conversation's binding |

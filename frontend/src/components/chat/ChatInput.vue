@@ -52,6 +52,8 @@ const props = withDefaults(
     // reach the agent as paths it can't actually look at.
     imageInputUnsupported?: boolean;
     readOnly?: boolean;
+    // Placeholder shown while readOnly; defaults to the generic read-only hint.
+    readOnlyPlaceholder?: string;
   }>(),
   {
     recallText: "",
@@ -59,6 +61,7 @@ const props = withDefaults(
     provider: "",
     imageInputUnsupported: false,
     readOnly: false,
+    readOnlyPlaceholder: "",
     turnStatusKnown: true,
   },
 );
@@ -437,7 +440,7 @@ defineExpose({ focus: focusInput });
           v-model="inputText"
           :placeholder="
             props.readOnly
-              ? t('chat.inputReadonly')
+              ? props.readOnlyPlaceholder || t('chat.inputReadonly')
               : !isConnected
                 ? t('chat.inputReconnecting')
                 : isThinking
@@ -492,7 +495,7 @@ defineExpose({ focus: focusInput });
           </Tooltip>
 
           <span class="min-w-0 flex-1" aria-hidden="true" />
-          <slot name="controls" />
+          <slot v-if="!props.readOnly" name="controls" />
 
           <!-- ml-auto keeps the fixed-size action cluster at the right edge while
                the model label yields width through truncation when necessary. -->
@@ -502,7 +505,7 @@ defineExpose({ focus: focusInput });
                the current task). The chevron opens the three send modes —
                now, after the current task, or at a chosen time. -->
             <Button
-              v-if="isThinking"
+              v-if="isThinking && !props.readOnly"
               variant="destructive"
               size="sm"
               data-testid="cancel-btn"

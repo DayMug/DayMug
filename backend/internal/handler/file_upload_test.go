@@ -13,7 +13,6 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/DayMug/DayMug/backend/internal/service"
 	"github.com/DayMug/DayMug/backend/internal/store"
 	"github.com/DayMug/DayMug/backend/internal/store/storetest"
 )
@@ -368,19 +367,5 @@ func TestFile_Upload_LargerThanMemoryBoundStillSaves(t *testing.T) {
 	}
 	if info.Size() != int64(size) {
 		t.Errorf("wrote %d bytes, want %d", info.Size(), size)
-	}
-}
-
-// The default cap is a multiple of the chat-attachment limit because this
-// endpoint takes a whole folder in one request; if someone drops it to the
-// per-file value, batch uploads silently start failing.
-func TestFileBrowserUploadCap_ExceedsChatAttachmentCap(t *testing.T) {
-	if fileBrowserUploadMaxBytes <= service.DefaultUploadMaxBytes {
-		t.Fatalf("batch cap %d must exceed the single-attachment cap %d",
-			fileBrowserUploadMaxBytes, service.DefaultUploadMaxBytes)
-	}
-	if fileBrowserUploadMemoryBytes >= fileBrowserUploadMaxBytes {
-		t.Fatalf("memory bound %d must be below the request cap %d",
-			fileBrowserUploadMemoryBytes, fileBrowserUploadMaxBytes)
 	}
 }

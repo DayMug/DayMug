@@ -589,6 +589,8 @@ export default {
     serverTitle: "Files and commands run on the DayMug server",
     boundTitle: "Files and commands run on {name} in {dir}",
     pickFolder: "Choose a folder on this computer…",
+    readOnlyComposer:
+      "View only: this conversation runs in a folder on {name}. Continue it in DayMug-Client on that computer.",
     notPaired: "This computer is not connected to DayMug yet; try again in a moment",
     failed: "Could not change where this conversation runs",
   },

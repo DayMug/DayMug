@@ -49,6 +49,10 @@ type clientMessage struct {
 	// of sending it now (the composer's "send later"). Steer is ignored then:
 	// when it fires, the prompt queues like a plain send.
 	SendAt *time.Time `json:"send_at,omitempty"`
+	// DeviceNonce, on an "init" frame, is the per-launch nonce DayMug-Client
+	// injects into the page it hosts (empty in a plain browser). It decides
+	// whether this connection may drive a conversation bound to a computer.
+	DeviceNonce string `json:"device_nonce,omitempty"`
 }
 
 // serverMessage is the wire shape of every server→client WS event. The
@@ -97,6 +101,8 @@ type connState struct {
 	// where the WS init resolved the owning user but doesn't keep the
 	// full row around.
 	userID string
+	// deviceNonce is the hosting client's nonce from the latest init.
+	deviceNonce string
 }
 
 // HandleTerminal handles WebSocket connections via Gin.

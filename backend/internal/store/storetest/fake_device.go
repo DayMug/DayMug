@@ -156,3 +156,17 @@ func (m *Fake) ClearConversationDevice(_ context.Context, conversationID string)
 	delete(st.bindings, conversationID)
 	return nil
 }
+
+func (m *Fake) ListDeviceConversations(_ context.Context, deviceID string) ([]string, error) {
+	st := m.deviceState()
+	st.mu.Lock()
+	defer st.mu.Unlock()
+	ids := []string{}
+	for id, b := range st.bindings {
+		if b.DeviceID == deviceID {
+			ids = append(ids, id)
+		}
+	}
+	sort.Strings(ids)
+	return ids, nil
+}

@@ -44,6 +44,10 @@ type DeviceHub struct {
 	// so an agent that starts while the client is briefly away still gets
 	// the tool list (calls then wait for the reconnect).
 	lastTools map[string][]DeviceTool
+	// lastNonce is the page nonce each device last announced. It outlives a
+	// disconnect so the page hosted in that client keeps its right to drive
+	// the device's conversations through a network blip.
+	lastNonce map[string]string
 	// online is closed and replaced whenever a session registers, so callers
 	// waiting for a reconnect wake up without polling.
 	online chan struct{}
@@ -71,6 +75,13 @@ const (
 	// dropped off (laptop lid, network blip) before failing.
 	deviceReconnectWait = 15 * time.Second
 )
+
+// ErrConversationOnDevice rejects a prompt for a device-bound conversation
+// sent from anywhere but the client hosting that device: a second page (a
+// plain browser, another computer) would interleave turns with the one the
+// user is driving on that computer.
+var ErrConversationOnDevice = Conflict(
+	"this conversation runs in a folder on another computer; continue it in DayMug-Client on that computer")
 
 // ErrDeviceOffline is the tool error a bound conversation sees while its
 // client is not connected.
@@ -144,6 +155,7 @@ func NewDeviceHub(s store.DeviceStore) *DeviceHub {
 		sessions:  map[string]*DeviceSession{},
 		pairs:     map[string]pendingPair{},
 		lastTools: map[string][]DeviceTool{},
+		lastNonce: map[string]string{},
 		online:    make(chan struct{}),
 		now:       time.Now,
 	}
@@ -271,6 +283,7 @@ func (h *DeviceHub) Register(device store.Device, hello DeviceHello, send func(D
 	old := h.sessions[device.ID]
 	h.sessions[device.ID] = s
 	h.lastTools[device.ID] = hello.Tools
+	h.lastNonce[device.ID] = hello.Nonce
 	close(h.online)
 	h.online = make(chan struct{})
 	h.mu.Unlock()
@@ -435,6 +448,34 @@ func (h *DeviceHub) CurrentDevice(userID, nonce string) (store.Device, DeviceHel
 		}
 	}
 	return store.Device{}, DeviceHello{}, false
+}
+
+// PageHostsDevice reports whether a page that carries nonce is hosted in the
+// client of deviceID (its current or most recent launch).
+func (h *DeviceHub) PageHostsDevice(deviceID, nonce string) bool {
+	if h == nil || !validNonce(nonce) {
+		return false
+	}
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if s := h.sessions[deviceID]; s != nil && s.hello.Nonce == nonce {
+		return true
+	}
+	return h.lastNonce[deviceID] == nonce
+}
+
+// CheckSender returns ErrConversationOnDevice when convID is bound to a device
+// and the page that sent the prompt (identified by its client nonce, empty for
+// a plain browser) is not hosted on that device.
+func (h *DeviceHub) CheckSender(ctx context.Context, s store.Store, convID, nonce string) error {
+	if h == nil || convID == "" {
+		return nil
+	}
+	b, ok := h.BindingFor(ctx, s, convID)
+	if !ok || h.PageHostsDevice(b.DeviceID, nonce) {
+		return nil
+	}
+	return ErrConversationOnDevice
 }
 
 // Revoke deletes a user's device and drops its connection.

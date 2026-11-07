@@ -26,6 +26,10 @@ defineProps<{
   imageInputUnsupported?: boolean;
   question?: UserQuestionRequest | null;
   answeringQuestion?: boolean;
+  // View-only (the conversation runs on another computer): nothing here may
+  // send, answer or cancel; only the transcript above stays live.
+  readOnly?: boolean;
+  readOnlyPlaceholder?: string;
 }>();
 
 const emit = defineEmits<{
@@ -60,7 +64,7 @@ defineExpose({ focus: () => chatInputRef.value?.focus() });
 <template>
   <div class="flex max-h-full min-h-0 flex-col" data-testid="composer-stack">
     <AskUserQuestionCard
-      v-if="question"
+      v-if="question && !readOnly"
       class="min-h-0 flex-1"
       :request="question"
       :submitting="answeringQuestion"
@@ -68,10 +72,12 @@ defineExpose({ focus: () => chatInputRef.value?.focus() });
       @answer="forwardAnswer"
     />
     <ScheduledPromptsArea
+      v-if="!readOnly"
       :prompts="scheduledPrompts ?? []"
       @cancel="emit('cancel-scheduled', $event)"
     />
     <PendingPromptsArea
+      v-if="!readOnly"
       :prompts="prompts"
       :has-active-task="hasActiveTask"
       @cancel="emit('cancel-prompt', $event)"
@@ -86,6 +92,8 @@ defineExpose({ focus: () => chatInputRef.value?.focus() });
       :recall-attachments="recallAttachments"
       :provider="provider"
       :image-input-unsupported="imageInputUnsupported"
+      :read-only="readOnly"
+      :read-only-placeholder="readOnlyPlaceholder"
       @send="forwardSend"
       @schedule="(text, attachments, sendAt) => emit('schedule', text, attachments, sendAt)"
       @cancel="emit('cancel')"

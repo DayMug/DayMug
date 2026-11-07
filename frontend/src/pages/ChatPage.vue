@@ -25,7 +25,12 @@ import ChatComposer from "@/components/chat/ChatComposer.vue";
 import ChatMobileHeader from "@/components/chat/ChatMobileHeader.vue";
 import WorkspacePanel from "@/components/WorkspacePanel.vue";
 import DeviceWorkspacePanel from "@/components/workspace/DeviceWorkspacePanel.vue";
-import { loadConversationDevice, useConversationDevice } from "@/composables/useConversationDevice";
+import {
+  loadConversationDevice,
+  useConversationDevice,
+  useConversationReadOnly,
+} from "@/composables/useConversationDevice";
+import { ensureDesktopDevice } from "@/composables/useDesktopDevice";
 import { Button } from "@/components/ui/button";
 import type { Conversation } from "@/composables/apiTypes";
 import type { MessageAttachment } from "@/composables/useWebSocket";
@@ -135,6 +140,7 @@ const isWaitingOnBackground = computed(
 // tail already says the context is empty — no point re-offering).
 const canShowClearContext = computed(() => {
   if (!currentConversationId.value) return false;
+  if (conversationReadOnly.value) return false;
   if (chatMessages.value.length === 0) return false;
   if (isThinking.value) return false;
   if (queuePosition.value !== null) return false;
@@ -248,6 +254,21 @@ const deviceWorkspacePanelRef = ref<InstanceType<typeof DeviceWorkspacePanel>>()
 // shows that folder in the file panel: it is where the agent's tools work.
 const deviceBinding = useConversationDevice(() => currentConversationId.value);
 watch(currentConversationId, (id) => void loadConversationDevice(id), { immediate: true });
+// Anywhere but that computer's client the conversation is view-only, with no
+// file panel: a second sender would interleave turns with the one driving it
+// there. A turn starting or ending is when another page may have just bound
+// or released it, so the binding is re-read then.
+const conversationReadOnly = useConversationReadOnly(() => currentConversationId.value);
+watch(isThinking, () => void loadConversationDevice(currentConversationId.value));
+onMounted(() => void ensureDesktopDevice());
+const readOnlyPlaceholder = computed(() =>
+  deviceBinding.value
+    ? t("device.readOnlyComposer", { name: deviceBinding.value.device_name })
+    : "",
+);
+function stopBackground() {
+  if (!conversationReadOnly.value) cancelMessage();
+}
 
 function refreshWorkspacePanel() {
   workspacePanelRef.value?.refresh();
@@ -422,7 +443,7 @@ function trimTrailingSlashes(path: string): string {
           :clearing-context="clearingContext"
           :is-connected="isConnected"
           @clear-context="handleClearContext"
-          @stop-background="cancelMessage"
+          @stop-background="stopBackground"
         />
       </div>
       <ChatComposer
@@ -440,6 +461,8 @@ function trimTrailingSlashes(path: string): string {
         :image-input-unsupported="imageInputUnsupported"
         :question="pendingUserQuestion"
         :answering-question="isAnsweringUserQuestion"
+        :read-only="conversationReadOnly"
+        :read-only-placeholder="readOnlyPlaceholder"
         @send="handleSendMessage"
         @cancel="cancelMessage"
         @cancel-prompt="cancelPendingPrompt"
@@ -472,6 +495,13 @@ function trimTrailingSlashes(path: string): string {
       <div class="flex-1 flex flex-col min-h-0 bg-background">
         <div v-if="!currentUser" class="text-muted-foreground text-center py-10 px-4 text-sm">
           {{ t("chat.selectUserWorkspace") }}
+        </div>
+        <div
+          v-else-if="conversationReadOnly"
+          class="text-muted-foreground text-center py-10 px-4 text-sm"
+          data-testid="device-readonly-files"
+        >
+          {{ readOnlyPlaceholder }}
         </div>
         <DeviceWorkspacePanel
           v-else-if="deviceBinding && currentConversationId"
@@ -508,7 +538,7 @@ function trimTrailingSlashes(path: string): string {
          ultrawide displays. -->
     <div
       class="chat-panel relative flex h-full w-full flex-col min-h-0 min-w-0"
-      :style="chatPanelStyle"
+      :style="conversationReadOnly ? undefined : chatPanelStyle"
     >
       <div
         class="panel-header relative flex min-h-12 shrink-0 items-center gap-3 border-b border-[#eeeeee] bg-card pl-[21px] pr-[18px] dark:border-border"
@@ -526,7 +556,7 @@ function trimTrailingSlashes(path: string): string {
              to be discoverable on first encounter — this button gives the
              action a clear visual home in the top bar. -->
         <Button
-          v-if="isWorkspaceCollapsed"
+          v-if="isWorkspaceCollapsed && !conversationReadOnly"
           type="button"
           variant="ghost"
           size="icon"
@@ -556,7 +586,7 @@ function trimTrailingSlashes(path: string): string {
           :clearing-context="clearingContext"
           :is-connected="isConnected"
           @clear-context="handleClearContext"
-          @stop-background="cancelMessage"
+          @stop-background="stopBackground"
         />
       </div>
       <ChatComposer
@@ -574,6 +604,8 @@ function trimTrailingSlashes(path: string): string {
         :image-input-unsupported="imageInputUnsupported"
         :question="pendingUserQuestion"
         :answering-question="isAnsweringUserQuestion"
+        :read-only="conversationReadOnly"
+        :read-only-placeholder="readOnlyPlaceholder"
         @send="handleSendMessage"
         @cancel="cancelMessage"
         @cancel-prompt="cancelPendingPrompt"
@@ -610,7 +642,7 @@ function trimTrailingSlashes(path: string): string {
          1px parent and the workspace column is a later sibling — without it
          the panel paints over the right half and only ~5px stay grabbable. -->
     <div
-      v-if="!isWorkspaceCollapsed"
+      v-if="!isWorkspaceCollapsed && !conversationReadOnly"
       class="resize-handle group relative w-px shrink-0 cursor-col-resize transition-colors hover:bg-primary/30"
       :class="isDragging ? 'bg-primary/30' : 'bg-[#eeeeee] dark:bg-border'"
       style="touch-action: none"
@@ -628,6 +660,7 @@ function trimTrailingSlashes(path: string): string {
          collapsed, useResizablePanels emits a zero-width style that hides the
          pane; the expand button in the chat header is the way back. -->
     <div
+      v-if="!conversationReadOnly"
       class="workspace-panel flex min-h-0 flex-col bg-background"
       :class="workspaceFullscreen ? 'absolute inset-0 z-30' : ''"
       :style="workspaceFullscreen ? undefined : workspacePanelStyle"

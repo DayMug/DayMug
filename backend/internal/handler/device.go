@@ -30,6 +30,9 @@ type DeviceHandler struct {
 	Store   store.Store
 	Hub     *service.DeviceHub
 	Version string
+	// Busy reports whether a conversation has a turn in flight
+	// (Broadcaster.IsBusy); nil reports none.
+	Busy func(conversationID string) bool
 }
 
 const (
@@ -207,6 +210,39 @@ func (h *DeviceHandler) Connect(c *gin.Context) {
 		}
 		session.Deliver(frame)
 	}
+}
+
+type deviceActivityConversation struct {
+	ID    string `json:"id"`
+	Title string `json:"title"`
+}
+
+// Activity tells a client which of the conversations bound to it have a turn
+// running right now, so closing its window can warn that those turns would
+// lose their tools. Authenticated with the device token, like Connect.
+func (h *DeviceHandler) Activity(c *gin.Context) {
+	device, err := h.Hub.Authenticate(c.Request.Context(), bearerToken(c.Request))
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid device token"})
+		return
+	}
+	ids, err := h.Store.ListDeviceConversations(c.Request.Context(), device.ID)
+	if err != nil {
+		respondInternalError(c, "devices", err)
+		return
+	}
+	running := []deviceActivityConversation{}
+	for _, id := range ids {
+		if h.Busy == nil || !h.Busy(id) {
+			continue
+		}
+		item := deviceActivityConversation{ID: id}
+		if conv, err := h.Store.GetConversation(c.Request.Context(), id); err == nil {
+			item.Title = conv.Title
+		}
+		running = append(running, item)
+	}
+	c.JSON(http.StatusOK, gin.H{"running": running})
 }
 
 // PickFolder opens the native folder dialog on the caller's device.

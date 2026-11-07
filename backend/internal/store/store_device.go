@@ -140,3 +140,22 @@ func (s *SQLiteStore) ClearConversationDevice(ctx context.Context, conversationI
 	_, err := s.db.ExecContext(ctx, "DELETE FROM conversation_devices WHERE conversation_id = ?", conversationID)
 	return err
 }
+
+// ListDeviceConversations returns the ids of the conversations bound to a device.
+func (s *SQLiteStore) ListDeviceConversations(ctx context.Context, deviceID string) ([]string, error) {
+	rows, err := s.db.QueryContext(ctx,
+		"SELECT conversation_id FROM conversation_devices WHERE device_id = ? ORDER BY conversation_id", deviceID)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	ids := []string{}
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
+}

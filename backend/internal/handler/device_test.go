@@ -141,3 +141,54 @@ func TestDeviceFileContentType(t *testing.T) {
 		}
 	}
 }
+
+// Activity lists only the device's own conversations that have a turn running,
+// and needs the device token.
+func TestDeviceActivity(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	s := storetest.New()
+	ctx := context.Background()
+	for _, u := range []store.User{{ID: "h1", Username: "alice"}, {ID: "a1", OwnerID: "h1"}} {
+		if err := s.CreateUser(ctx, u); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, id := range []string{"busy", "idle", "elsewhere"} {
+		if err := s.CreateConversation(ctx, id, "title "+id, "a1", "", "claude", ""); err != nil {
+			t.Fatal(err)
+		}
+	}
+	_, _ = s.CreateDevice(ctx, store.Device{ID: "d1", UserID: "h1", TokenHash: service.HashDeviceToken("dmd_tok1")})
+	_, _ = s.CreateDevice(ctx, store.Device{ID: "d2", UserID: "h1", TokenHash: service.HashDeviceToken("dmd_tok2")})
+	for conv, dev := range map[string]string{"busy": "d1", "idle": "d1", "elsewhere": "d2"} {
+		if err := s.SetConversationDevice(ctx, store.ConversationDevice{ConversationID: conv, DeviceID: dev, WorkDir: "/w"}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	h := &DeviceHandler{Store: s, Hub: service.NewDeviceHub(s), Busy: func(id string) bool { return id != "idle" }}
+	engine := gin.New()
+	engine.GET("/api/devices/activity", h.Activity)
+
+	get := func(token string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(http.MethodGet, "/api/devices/activity", nil)
+		if token != "" {
+			req.Header.Set("Authorization", "Bearer "+token)
+		}
+		w := httptest.NewRecorder()
+		engine.ServeHTTP(w, req)
+		return w
+	}
+	if w := get(""); w.Code != http.StatusUnauthorized {
+		t.Fatalf("no token: %d", w.Code)
+	}
+	w := get("dmd_tok1")
+	var body struct {
+		Running []deviceActivityConversation `json:"running"`
+	}
+	if w.Code != http.StatusOK || json.Unmarshal(w.Body.Bytes(), &body) != nil {
+		t.Fatalf("activity: %d %s", w.Code, w.Body)
+	}
+	if len(body.Running) != 1 || body.Running[0].ID != "busy" || body.Running[0].Title != "title busy" {
+		t.Fatalf("running = %+v", body.Running)
+	}
+}

@@ -97,6 +97,7 @@ import {
   wireContentToString,
 } from "./chat/messageState";
 import { workDirHint } from "./chat/workDir";
+import { desktopClient } from "@/lib/desktopClient";
 
 export { bindConversationLookup };
 export { CONTEXT_CLEARED_DIVIDER };
@@ -119,6 +120,9 @@ function sendInit(syncMissedMessages: boolean) {
     // correct for a brand-new conversation, harmless for an established
     // one because the dedup set will skip what we've already rendered.
     last_message_id: cursors.lastSyncedMessageId || undefined,
+    // Lets the server accept prompts for a conversation bound to the
+    // computer whose DayMug-Client hosts this page; absent in a browser.
+    device_nonce: desktopClient()?.nonce,
   });
   if (syncMissedMessages) {
     // Belt-and-suspenders for physical reconnect / visibility resync: REST

@@ -10,17 +10,12 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
-
-	"github.com/DayMug/DayMug/backend/internal/service"
 )
 
-// Bounds for the file-browser upload path. It has to allow a *batch*: a
-// folder upload sends every selected file in a single request (frontend
-// uploadFiles()), so the cap is a multiple of the per-file
-// service.DefaultUploadMaxBytes rather than the same number.
+// The file-browser upload path takes files of any size and number: the user
+// is writing into their own workspace, and parts beyond the memory bound below
+// spill to temp files instead of the heap.
 const (
-	fileBrowserUploadMaxBytes = 8 * service.DefaultUploadMaxBytes
-
 	// fileBrowserUploadMemoryBytes bounds what the multipart parser keeps on
 	// the heap. gin's default MaxMultipartMemory is 32 MiB and nothing in this
 	// repo overrides it, so every concurrent upload could pin that much;
@@ -80,13 +75,12 @@ func (h *FileHandler) CheckUploadConflicts(c *gin.Context) {
 }
 
 func (h *FileHandler) Upload(c *gin.Context) {
-	// Cap the request before touching the body: the multipart parser must
-	// never see more bytes than this, whatever Content-Length claims.
+	// An optional cap applies before touching the body: the multipart parser
+	// must never see more bytes than this, whatever Content-Length claims.
 	maxBytes := h.UploadMaxBytes
-	if maxBytes <= 0 {
-		maxBytes = fileBrowserUploadMaxBytes
+	if maxBytes > 0 {
+		c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, maxBytes)
 	}
-	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, maxBytes)
 
 	access, ok := h.getUserFileAccess(c)
 	if !ok {
