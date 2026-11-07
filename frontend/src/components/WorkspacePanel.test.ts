@@ -121,6 +121,18 @@ vi.mock("@/composables/useFileApi", () => ({
   shouldInspectTextFile: (name: string) => !name.includes("."),
 }));
 
+// Opening an .xlsx/.pptx tab lazy-loads the office editor, whose import chain
+// (host → csvbridge → csv) can still be resolving when the file's tests end —
+// Vitest then fails the whole run with an EnvironmentTeardownError. These
+// tests are about routing and tabs, so stub the editor to a marker.
+vi.mock("@/components/OfficePane.vue", () => ({
+  default: {
+    name: "OfficePane",
+    props: ["userId", "path", "app"],
+    template: "<div>office editor: {{ app }}</div>",
+  },
+}));
+
 vi.mock("@/composables/useMarkdown", () => ({
   renderMarkdown: (s: string) => `<p>${s}</p>`,
 }));
