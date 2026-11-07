@@ -3,6 +3,11 @@ import { mount, flushPromises } from "@vue/test-utils";
 import { createRouter, createMemoryHistory } from "vue-router";
 import LoginPage from "./LoginPage.vue";
 
+const mockBrowserSSO = vi.fn();
+vi.mock("@/lib/browserSSO", () => ({
+  browserSSO: (...args: unknown[]) => mockBrowserSSO(...args),
+}));
+
 const mockLogin = vi.fn();
 const mockFetchAuthOptions = vi.fn();
 const mockFetchBootstrapStatus = vi.fn();
@@ -34,6 +39,7 @@ function makeRouter(initialPath = "/login") {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  delete window.__DAYMUG_CLIENT__;
   // Default: password login enabled, OIDC off — matches the typical config.
   mockFetchAuthOptions.mockResolvedValue({
     password_login_enabled: true,
@@ -266,6 +272,29 @@ describe("LoginPage", () => {
     expect(ssoButton).toBeDefined();
     await ssoButton!.trigger("click");
     expect(assignMock).toHaveBeenCalledWith("/api/auth/oidc/login");
+  });
+
+  it("uses browser SSO in the desktop client and returns to chat", async () => {
+    window.__DAYMUG_CLIENT__ = { nonce: "n".repeat(40) };
+    mockBrowserSSO.mockResolvedValueOnce(undefined);
+    mockFetchAuthOptions.mockResolvedValueOnce({
+      password_login_enabled: true,
+      oidc: { enabled: true, button_label: "SSO" },
+    });
+    const router = makeRouter();
+    await router.isReady();
+    const wrapper = mount(LoginPage, { global: { plugins: [router] } });
+    await flushPromises();
+    await wrapper
+      .findAll("button")
+      .find((b) => b.text().includes("SSO"))!
+      .trigger("click");
+    await flushPromises();
+    expect(mockBrowserSSO).toHaveBeenCalledWith(expect.any(AbortSignal));
+    expect(assignMock).toHaveBeenCalledWith("/chat");
+    expect(assignMock).not.toHaveBeenCalledWith("/api/auth/oidc/login");
+    wrapper.unmount();
+    delete window.__DAYMUG_CLIENT__;
   });
 
   it("renders a language switcher in the top corner with EN selected by default", async () => {

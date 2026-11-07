@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/http"
 	"net/url"
+	"sync"
 
 	"github.com/gin-gonic/gin"
 
@@ -17,9 +18,11 @@ import (
 // routes and this handler is never instantiated. The auth.options endpoint
 // reflects that state so the frontend hides the SSO button.
 type OIDCHandler struct {
-	Store store.Store
-	Cfg   *config.Config
-	Svc   *service.OIDCService
+	Store     store.Store
+	Cfg       *config.Config
+	Svc       *service.OIDCService
+	desktopMu sync.Mutex
+	desktop   map[string]*desktopLogin
 }
 
 func NewOIDCHandler(s store.Store, cfg *config.Config, svc *service.OIDCService) *OIDCHandler {
@@ -106,6 +109,9 @@ func (h *OIDCHandler) Callback(c *gin.Context) {
 }
 
 func (h *OIDCHandler) finishLogin(c *gin.Context, userID string) {
+	if h.finishDesktopLogin(c, userID) {
+		return
+	}
 	ops := h.authOps()
 	token, _, err := ops.OpenSession(c.Request.Context(), userID)
 	if err != nil {
@@ -134,5 +140,8 @@ func oidcErrorText(err error) string {
 // returning a JSON 4xx) because the callback is reached via a top-level
 // browser navigation, not an XHR — there's no JS to render an error.
 func (h *OIDCHandler) redirectWithError(c *gin.Context, msg string) {
+	if h.desktopError(c, msg) {
+		return
+	}
 	c.Redirect(http.StatusFound, "/login?oidc_error="+url.QueryEscape(msg))
 }

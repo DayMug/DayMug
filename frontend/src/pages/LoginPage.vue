@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, computed } from "vue";
+import { ref, onMounted, onUnmounted, computed } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useI18n } from "vue-i18n";
 import { Input } from "@/components/ui/input";
@@ -11,6 +11,8 @@ import { Badge } from "@/components/ui/badge";
 import LanguageSwitcher from "@/components/LanguageSwitcher.vue";
 import PoweredBy from "@/components/PoweredBy.vue";
 import { ArrowRight, Braces, CircleCheck, Clock3, FolderCode, ShieldCheck } from "lucide-vue-next";
+import { desktopClient } from "@/lib/desktopClient";
+import { browserSSO } from "@/lib/browserSSO";
 import { safeRedirect } from "@/lib/safeRedirect";
 import {
   login,
@@ -115,7 +117,26 @@ onMounted(async () => {
   }
 });
 
-function startOIDC() {
+const ssoPending = ref(false);
+let ssoAbort: AbortController | undefined;
+onUnmounted(() => ssoAbort?.abort());
+
+async function startOIDC() {
+  if (desktopClient()) {
+    if (ssoPending.value) return;
+    ssoPending.value = true;
+    error.value = "";
+    ssoAbort = new AbortController();
+    try {
+      await browserSSO(ssoAbort.signal);
+      window.location.assign("/chat");
+    } catch (e) {
+      if (!ssoAbort.signal.aborted) error.value = errorMessage(e, t("login.errors.generic"));
+    } finally {
+      ssoPending.value = false;
+    }
+    return;
+  }
   // Top-level navigation, not XHR — the IdP needs the browser to follow
   // redirects through cookies, etc.
   window.location.assign("/api/auth/oidc/login");
@@ -344,9 +365,10 @@ async function onSubmit() {
                 variant="outline"
                 size="lg"
                 class="h-12 w-full gap-2 rounded-xl border-[#d9dce5] bg-white"
+                :disabled="ssoPending"
                 @click="startOIDC"
               >
-                {{ oidcLabel }}
+                {{ ssoPending ? t("login.ssoBrowserWaiting") : oidcLabel }}
                 <ArrowRight class="size-4" />
               </Button>
             </div>

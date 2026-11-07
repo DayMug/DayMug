@@ -5,6 +5,7 @@ export interface DesktopClientInfo {
   // Per-launch secret shared between the page and the client's own
   // connection; it is how the server tells which client hosts this page.
   nonce: string;
+  browserLoginNavigation?: boolean;
   version: string;
   os: string;
   hostname: string;

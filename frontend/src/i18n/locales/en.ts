@@ -639,6 +639,7 @@ export default {
     submitting: "Signing in...",
     sessionsHint: "This browser stays signed in for 30 days.",
     or: "or",
+    ssoBrowserWaiting: "Complete sign-in in your browser…",
     ssoFallbackLabel: "Sign in with SSO",
     cliOnline: "Service online",
     footerLocal: "Runs on your server. Your data and accounts stay under your control.",

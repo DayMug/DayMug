@@ -596,6 +596,7 @@ export default {
     submitting: "登录中…",
     sessionsHint: "30 天内在此浏览器上无需重复登录。",
     or: "或",
+    ssoBrowserWaiting: "请在浏览器中完成登录…",
     ssoFallbackLabel: "单点登录（SSO）",
     cliOnline: "服务运行中",
     footerLocal: "私有部署，数据和账号都留在你的服务器上。",

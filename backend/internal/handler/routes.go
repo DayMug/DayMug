@@ -186,6 +186,9 @@ func (b *routeBuilder) registerPublicRoutes() {
 		oidcH := NewOIDCHandler(b.store, b.cfg, b.opts.OIDC)
 		b.api.GET("/auth/oidc/login", oidcH.Login)
 		b.api.GET("/auth/oidc/callback", oidcH.Callback)
+		b.api.POST("/auth/oidc/desktop/start", oidcH.DesktopStart)
+		b.api.POST("/auth/oidc/desktop/claim", oidcH.DesktopClaim)
+		b.api.POST("/auth/oidc/desktop/approve", oidcH.DesktopApprove)
 	}
 }
 

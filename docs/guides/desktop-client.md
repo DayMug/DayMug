@@ -7,8 +7,9 @@ In a plain browser nothing of this exists: no selector, no request, no extra too
 ## Using it
 
 1. Install the client, enter the DayMug server URL, and log in as usual.
-2. The page pairs the computer with your account silently (one device per client install; listed under `GET /api/devices`).
-3. In a conversation, the composer shows a **run location** selector next to the model picker. Pick **Choose a folder on this computer…**: a native folder dialog opens; the conversation is now bound to that folder. Switch back to **Server** at any time.
+2. For SSO, the client opens the identity provider in your system browser so Passkeys work there. Confirm the desktop sign-in in the browser, then return to the client; the session is delivered through a separate, single-use claim valid for five minutes. Password login stays in the app.
+3. The page pairs the computer with your account silently (one device per client install; listed under `GET /api/devices`).
+4. In a conversation, the composer shows a **run location** selector next to the model picker. Pick **Choose a folder on this computer…**: a native folder dialog opens; the conversation is now bound to that folder. Switch back to **Server** at any time.
 
 A bound conversation's Read / Write / Edit / Glob / Grep / Bash calls execute on the computer, in the chosen folder, with the user's own permissions and no confirmation prompt (phase 1 runs every task automatically). Tool cards render exactly like the built-in ones.
 
@@ -46,3 +47,9 @@ DayMug-Client                                   DayMug server
 - Binding a conversation to a computer gives the agent the user's full privileges there. Phase 1 has no approval step by design.
 - The remote page has no Tauri IPC: everything it needs (folder dialog, directory checks) goes through the server over the authenticated socket. A compromised server can therefore drive every connected client — treat the server like any host you grant shell access to.
 - Revoke a device with `DELETE /api/devices/:id`; its socket drops and its bindings are deleted.
+
+### Browser SSO handoff
+
+`POST /api/auth/oidc/desktop/start` returns an authorization URL and an independent claim secret. The webview keeps the claim in memory and opens the authorization URL externally. New clients advertise `browserLoginNavigation: true` in their marker and intercept the same-origin synthetic navigation `/__daymug_client__/browser-login?url=…`; only HTTP(S) targets are allowed. Older clients use their external new-window handler.
+
+The normal OIDC callback verifies the identity and presents a confirmation form in the browser, with a separate random approval secret. After confirmation, `POST /api/auth/oidc/desktop/claim` exchanges the initiating webview's claim for its HttpOnly session cookie. Pending attempts expire in five minutes, are bounded in memory, and can be claimed only once. No browser cookie, session token or claim secret is placed in a URL.
