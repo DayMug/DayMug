@@ -164,4 +164,96 @@ describe("browser task notifications", () => {
     expect(await requestBrowserNotificationPermission()).toBe("denied");
     expect(FakeNotification.requestPermission).toHaveBeenCalledOnce();
   });
+
+  describe("in DayMug-Client", () => {
+    const assign = vi.fn();
+
+    function desktopRequest(): URLSearchParams {
+      expect(assign).toHaveBeenCalledOnce();
+      const target = String(assign.mock.calls[0][0]);
+      expect(target.startsWith("/__daymug_client__/notify?")).toBe(true);
+      return new URLSearchParams(target.slice(target.indexOf("?") + 1));
+    }
+
+    beforeEach(() => {
+      assign.mockClear();
+      vi.stubGlobal("location", { assign });
+      window.__DAYMUG_CLIENT__ = {
+        nonce: "n".repeat(32),
+        version: "0.1.0",
+        os: "macos",
+        hostname: "mac",
+        notificationNavigation: true,
+      };
+      // WKWebView has no Notification API at all.
+      vi.stubGlobal("Notification", undefined);
+    });
+
+    afterEach(() => {
+      delete window.__DAYMUG_CLIENT__;
+    });
+
+    it("asks the client instead of the Notification API", async () => {
+      await notifyBrowserTask({ kind: "completed", conversationId: "c1", eventId: "seq-10" });
+
+      const params = desktopRequest();
+      expect(params.get("title")).toBe("Task completed");
+      expect(params.get("body")).toBe("Conversation: Release build");
+      expect(params.get("conversation")).toBe("c1");
+      expect(params.get("viewing")).toBe("0");
+    });
+
+    it("reports a conversation that is on screen and leaves the decision to the client", async () => {
+      setVisibility("visible");
+
+      await notifyBrowserTask({ kind: "waiting", conversationId: "c1", eventId: "ask-10" });
+
+      expect(desktopRequest().get("viewing")).toBe("1");
+    });
+
+    it("still claims each event once", async () => {
+      const event = { kind: "failed" as const, conversationId: "c1", eventId: "error-10" };
+
+      await notifyBrowserTask(event);
+      _internals.resetForTest();
+      await notifyBrowserTask(event);
+
+      expect(assign).toHaveBeenCalledOnce();
+    });
+
+    it("needs no permission and never prompts for one", async () => {
+      vi.stubGlobal("Notification", FakeNotification);
+      FakeNotification.permission = "default";
+
+      expect(await requestBrowserNotificationPermission()).toBe("granted");
+
+      expect(FakeNotification.requestPermission).not.toHaveBeenCalled();
+    });
+
+    it("navigates to the conversation when the client reports a click", () => {
+      const navigate = vi.fn();
+      bindBrowserNotificationNavigation(navigate);
+
+      window.dispatchEvent(
+        new CustomEvent("daymug-client-notification-click", { detail: { conversationId: "c1" } }),
+      );
+      expect(navigate).toHaveBeenCalledWith("c1");
+
+      bindBrowserNotificationNavigation(null);
+      window.dispatchEvent(
+        new CustomEvent("daymug-client-notification-click", { detail: { conversationId: "c2" } }),
+      );
+      expect(navigate).toHaveBeenCalledOnce();
+    });
+
+    it("falls back to the Notification API in an older client", async () => {
+      vi.stubGlobal("Notification", FakeNotification);
+      window.__DAYMUG_CLIENT__ = { ...window.__DAYMUG_CLIENT__, notificationNavigation: undefined };
+
+      await notifyBrowserTask({ kind: "completed", conversationId: "c1", eventId: "seq-11" });
+
+      expect(assign).not.toHaveBeenCalled();
+      expect(FakeNotification.instances).toHaveLength(1);
+    });
+  });
 });

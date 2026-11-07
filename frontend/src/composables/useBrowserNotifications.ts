@@ -1,4 +1,5 @@
 import { i18n } from "@/i18n";
+import { desktopClient } from "@/lib/desktopClient";
 import { currentConversationId, lookupConversation } from "@/stores/activeConversationStore";
 
 export type BrowserTaskNotificationKind = "completed" | "failed" | "waiting";
@@ -12,11 +13,18 @@ export interface BrowserTaskNotification {
 type ConversationNavigator = (conversationId: string) => void;
 
 const DEDUPE_LOCK = "daymug-browser-notification";
+// DayMug-Client shows task notifications natively: WKWebView has no
+// Notification API and WebKitGTK refuses it, so the page asks the client
+// through a same-origin navigation it intercepts (like the browser-login
+// handoff). A click on the native notification comes back as this DOM event.
+const DESKTOP_NOTIFY_PATH = "/__daymug_client__/notify";
+const DESKTOP_CLICK_EVENT = "daymug-client-notification-click";
 const DEDUPE_STORAGE_KEY = "daymug-browser-notification-claims";
 const DEDUPE_TTL_MS = 5 * 60 * 1000;
 const VIEWING_PROBE_MS = 75;
 
 let navigateToConversation: ConversationNavigator | null = null;
+let desktopClickListener: ((event: Event) => void) | null = null;
 const memoryClaims = new Map<string, number>();
 let notificationChannel: BroadcastChannel | null | undefined;
 const pendingViewingProbes = new Map<
@@ -31,6 +39,10 @@ type BrowserNotificationChannelMessage =
 function notificationAPI(): typeof Notification | null {
   if (typeof window === "undefined" || !("Notification" in window)) return null;
   return window.Notification;
+}
+
+function desktopNotifications(): boolean {
+  return desktopClient()?.notificationNavigation === true;
 }
 
 function isConversationBeingViewed(conversationId: string): boolean {
@@ -169,11 +181,26 @@ function stableHash(value: string): string {
 
 export function bindBrowserNotificationNavigation(handler: ConversationNavigator | null) {
   navigateToConversation = handler;
-  if (handler) getNotificationChannel();
-  else closeNotificationChannel();
+  if (desktopClickListener) {
+    window.removeEventListener(DESKTOP_CLICK_EVENT, desktopClickListener);
+    desktopClickListener = null;
+  }
+  if (handler) {
+    getNotificationChannel();
+    desktopClickListener = (event) => {
+      const id = (event as CustomEvent<{ conversationId?: unknown }>).detail?.conversationId;
+      if (typeof id === "string" && id) navigateToConversation?.(id);
+    };
+    window.addEventListener(DESKTOP_CLICK_EVENT, desktopClickListener);
+  } else {
+    closeNotificationChannel();
+  }
 }
 
 export async function requestBrowserNotificationPermission(): Promise<NotificationPermission | null> {
+  // The desktop client needs no permission and must not be asked for one:
+  // WebView2 would show its own prompt for an API the page will not use.
+  if (desktopNotifications()) return "granted";
   const api = notificationAPI();
   if (!api) return null;
   if (api.permission !== "default") return api.permission;
@@ -186,10 +213,15 @@ export async function requestBrowserNotificationPermission(): Promise<Notificati
 
 export async function notifyBrowserTask(event: BrowserTaskNotification): Promise<void> {
   if (!event.conversationId || !event.eventId) return;
-  if (isConversationBeingViewed(event.conversationId)) return;
+  const desktop = desktopNotifications();
+  // A browser tab showing the conversation is enough; a desktop window
+  // showing it may still be behind other windows, which only the client
+  // can tell, so it gets the fact and decides.
+  const viewing = isConversationBeingViewed(event.conversationId);
+  if (viewing && !desktop) return;
 
   const api = notificationAPI();
-  if (!api || api.permission !== "granted") return;
+  if (!desktop && (!api || api.permission !== "granted")) return;
   if (await isConversationViewedInAnotherTab(event.conversationId)) return;
 
   const dedupeKey = stableHash(`${event.conversationId}:${event.kind}:${event.eventId}`);
@@ -198,9 +230,24 @@ export async function notifyBrowserTask(event: BrowserTaskNotification): Promise
   const conversationTitle =
     lookupConversation(event.conversationId)?.title.trim() ||
     translated("browserNotifications.untitledConversation");
+  const title = translated(`browserNotifications.${event.kind}`);
+  const body = translated("browserNotifications.conversation", { title: conversationTitle });
+  if (desktop) {
+    // The client cancels this navigation, so the page stays as it is.
+    window.location.assign(
+      `${DESKTOP_NOTIFY_PATH}?${new URLSearchParams({
+        title,
+        body,
+        conversation: event.conversationId,
+        viewing: viewing ? "1" : "0",
+      })}`,
+    );
+    return;
+  }
+  if (!api) return;
   try {
-    const notification = new api(translated(`browserNotifications.${event.kind}`), {
-      body: translated("browserNotifications.conversation", { title: conversationTitle }),
+    const notification = new api(title, {
+      body,
       icon: "/favicon.svg",
       tag: `daymug:${dedupeKey}`,
     });
@@ -221,8 +268,7 @@ export const _internals = {
   isConversationBeingViewed,
   stableHash,
   resetForTest() {
-    closeNotificationChannel();
+    bindBrowserNotificationNavigation(null);
     memoryClaims.clear();
-    navigateToConversation = null;
   },
 };

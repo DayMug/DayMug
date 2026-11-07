@@ -6,6 +6,9 @@ export interface DesktopClientInfo {
   // connection; it is how the server tells which client hosts this page.
   nonce: string;
   browserLoginNavigation?: boolean;
+  // The client turns the synthetic navigation `/__daymug_client__/notify`
+  // into a native notification; see useBrowserNotifications.
+  notificationNavigation?: boolean;
   version: string;
   os: string;
   hostname: string;
@@ -23,6 +26,8 @@ export function desktopClient(): DesktopClientInfo | null {
   if (!raw || typeof raw.nonce !== "string" || raw.nonce.length < 32) return null;
   return {
     nonce: raw.nonce,
+    browserLoginNavigation: raw.browserLoginNavigation === true,
+    notificationNavigation: raw.notificationNavigation === true,
     version: typeof raw.version === "string" ? raw.version : "",
     os: typeof raw.os === "string" ? raw.os : "",
     hostname: typeof raw.hostname === "string" ? raw.hostname : "",

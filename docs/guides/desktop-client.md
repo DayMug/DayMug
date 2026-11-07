@@ -58,3 +58,13 @@ DayMug-Client                                   DayMug server
 `POST /api/auth/oidc/desktop/start` returns an authorization URL and an independent claim secret. The webview keeps the claim in memory and opens the authorization URL externally. New clients advertise `browserLoginNavigation: true` in their marker and intercept the same-origin synthetic navigation `/__daymug_client__/browser-login?url=…`; only HTTP(S) targets are allowed. Older clients use their external new-window handler.
 
 The normal OIDC callback verifies the identity and presents a confirmation form in the browser, with a separate random approval secret. After confirmation, `POST /api/auth/oidc/desktop/claim` exchanges the initiating webview's claim for its HttpOnly session cookie. Pending attempts expire in five minutes, are bounded in memory, and can be claimed only once. No browser cookie, session token or claim secret is placed in a URL.
+
+### Task notifications
+
+In a browser, a finished, failed or waiting task that the user is not looking at becomes a Web Notification (`useBrowserNotifications.ts`). Inside the client that API is unusable: WKWebView does not expose it, WebKitGTK refuses it unless the host allows, and WebView2 shows its own prompt and toast. Clients that advertise `notificationNavigation: true` in their marker therefore intercept the same-origin synthetic navigation
+
+```
+/__daymug_client__/notify?title=…&body=…&conversation=<id>&viewing=0|1
+```
+
+and show a native notification; the page never calls the Notification API there and is not asked for permission. The page still decides whether the event deserves a notification (another tab showing the conversation, cross-tab dedupe), but reports `viewing=1` instead of staying quiet when the conversation is on screen: only the client knows whether its window is in front, and it drops the notification just when both hold. A click on the native notification raises the window, switches to the tab that asked, and dispatches `daymug-client-notification-click` with `{ conversationId }` on that page's `window`; the page navigates to the conversation. Older clients without the marker flag keep the browser path.
