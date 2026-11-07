@@ -205,6 +205,8 @@ func (b *routeBuilder) registerDeviceRoutes() {
 	b.authed.GET("/conversations/:id/device", h.GetConversationDevice)
 	b.authed.PUT("/conversations/:id/device", h.SetConversationDevice)
 	b.authed.DELETE("/conversations/:id/device", h.ClearConversationDevice)
+	b.authed.GET("/conversations/:id/device/files", h.ListConversationDeviceFiles)
+	b.authed.GET("/conversations/:id/device/files/read", h.ReadConversationDeviceFile)
 }
 
 // registerAccountRoutes mounts the signed-in user's own settings, the

@@ -6,8 +6,11 @@ import (
 	"errors"
 	"io"
 	"log"
+	"mime"
 	"net"
 	"net/http"
+	"net/url"
+	"path"
 	"strings"
 	"time"
 
@@ -294,6 +297,68 @@ func (h *DeviceHandler) ClearConversationDevice(c *gin.Context) {
 		return
 	}
 	c.Status(http.StatusNoContent)
+}
+
+// ListConversationDeviceFiles lists a directory of the conversation's bound
+// folder for the workspace panel. Paths are relative to that folder.
+func (h *DeviceHandler) ListConversationDeviceFiles(c *gin.Context) {
+	conv, ok := loadOwnedConversation(c, h.Store, c.Param("id"))
+	if !ok {
+		return
+	}
+	listing, err := h.Hub.ListDeviceDir(c.Request.Context(), h.Store, conv.ID, c.Query("path"))
+	if err != nil {
+		respondServiceError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, listing)
+}
+
+// ReadConversationDeviceFile streams a file of the conversation's bound
+// folder. The bytes come from the user's computer, so they are never served
+// as an active document of this origin: HTML and other script-capable types
+// go out as text, and every response carries a sandbox CSP.
+func (h *DeviceHandler) ReadConversationDeviceFile(c *gin.Context) {
+	conv, ok := loadOwnedConversation(c, h.Store, c.Param("id"))
+	if !ok {
+		return
+	}
+	file, err := h.Hub.ReadDeviceFile(c.Request.Context(), h.Store, conv.ID, c.Query("path"))
+	if err != nil {
+		respondServiceError(c, err)
+		return
+	}
+	name := path.Base(strings.ReplaceAll(c.Query("path"), "\\", "/"))
+	c.Header("Content-Security-Policy", "sandbox; default-src 'none'; img-src 'self' data: blob:; style-src 'unsafe-inline'")
+	c.Header("X-Content-Type-Options", "nosniff")
+	c.Header("Cache-Control", "no-store")
+	disposition := "inline"
+	if c.Query("download") != "" {
+		disposition = "attachment"
+	}
+	c.Header("Content-Disposition", disposition+"; filename*=UTF-8''"+url.PathEscape(name))
+	c.Header("Last-Modified", file.Modified.Format(http.TimeFormat))
+	c.Data(http.StatusOK, deviceFileContentType(name, file.Data), file.Data)
+}
+
+// deviceFileContentType picks a passive content type: images, PDF, audio and
+// video keep theirs, everything else is served as text or octets.
+func deviceFileContentType(name string, data []byte) string {
+	ct := mime.TypeByExtension(strings.ToLower(path.Ext(name)))
+	if ct == "" {
+		ct = http.DetectContentType(data)
+	}
+	base := strings.TrimSpace(strings.SplitN(ct, ";", 2)[0])
+	switch {
+	case base == "image/svg+xml":
+		return "text/plain; charset=utf-8"
+	case strings.HasPrefix(base, "image/"), strings.HasPrefix(base, "audio/"), strings.HasPrefix(base, "video/"), base == "application/pdf":
+		return base
+	case strings.HasPrefix(http.DetectContentType(data), "text/"):
+		return "text/plain; charset=utf-8"
+	default:
+		return "application/octet-stream"
+	}
 }
 
 // localOnly admits requests that come straight from a process on this host.

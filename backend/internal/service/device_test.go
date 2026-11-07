@@ -213,7 +213,21 @@ func TestApplyDeviceRoute(t *testing.T) {
 	if err := s.SetConversationDevice(ctx, store.ConversationDevice{ConversationID: "c1", DeviceID: d.ID, WorkDir: "/Users/alice/proj"}); err != nil {
 		t.Fatal(err)
 	}
-	connect(h, d, DeviceHello{OS: "macos", Hostname: "mbp", Tools: []DeviceTool{{Name: "Bash"}, {Name: "Read"}, {Name: "Custom"}}}, nil)
+	agentUser, _ := s.GetUser(ctx, "a1")
+	agentUser.ManageClaudeMd, agentUser.ClaudeMdContent = true, "Be a helpful reviewer."
+	if err := s.UpdateUser(ctx, agentUser); err != nil {
+		t.Fatal(err)
+	}
+	var instructionRoot string
+	connect(h, d, DeviceHello{OS: "macos", Hostname: "mbp", Tools: []DeviceTool{{Name: "Bash"}, {Name: "Read"}, {Name: "Custom"}}}, func(f DeviceFrame) DeviceFrame {
+		var p map[string]string
+		_ = json.Unmarshal(f.Params, &p)
+		if f.Method != "project_instructions" {
+			return DeviceFrame{Type: "result", ID: f.ID, Error: "unsupported method " + f.Method}
+		}
+		instructionRoot = p["root"]
+		return DeviceFrame{Type: "result", ID: f.ID, Result: json.RawMessage(`{"files":[{"path":"/Users/alice/proj/AGENTS.md","content":"Run make test.\n"}]}`)}
+	})
 	var opts agent.RunRequest
 	if !h.ApplyDeviceRoute(ctx, s, &opts, "c1", "http://127.0.0.1:8080/") {
 		t.Fatal("bound conversation not routed")
@@ -239,6 +253,17 @@ func TestApplyDeviceRoute(t *testing.T) {
 	if !strings.Contains(opts.SystemPrompt, "/Users/alice/proj") || !strings.Contains(opts.SystemPrompt, "mbp") {
 		t.Fatalf("system prompt = %q", opts.SystemPrompt)
 	}
+	if len(route.SettingSources) != 1 || route.SettingSources[0] != "user" {
+		t.Fatalf("setting sources = %v", route.SettingSources)
+	}
+	if instructionRoot != "/Users/alice/proj" {
+		t.Fatalf("instructions requested for %q", instructionRoot)
+	}
+	for _, want := range []string{"Be a helpful reviewer.", "Contents of `/Users/alice/proj/AGENTS.md`", "Run make test."} {
+		if !strings.Contains(opts.SystemPrompt, want) {
+			t.Fatalf("system prompt lacks %q: %q", want, opts.SystemPrompt)
+		}
+	}
 	payload, _ := json.Marshal(route.MCPServers)
 	if !strings.Contains(string(payload), `"type":"http"`) {
 		t.Fatalf("mcp payload = %s", payload)
@@ -248,5 +273,60 @@ func TestApplyDeviceRoute(t *testing.T) {
 func TestDeviceMCPBaseURL(t *testing.T) {
 	if DeviceMCPBaseURL(nil) != "" {
 		t.Fatal("nil config produced a URL")
+	}
+}
+
+func TestCleanDevicePath(t *testing.T) {
+	for in, want := range map[string]string{"": ".", ".": ".", "a/./b/": "a/b", `a\b`: "a/b"} {
+		if got, err := cleanDevicePath(in); err != nil || got != want {
+			t.Errorf("cleanDevicePath(%q) = %q, %v; want %q", in, got, err, want)
+		}
+	}
+	for _, bad := range []string{"/etc/passwd", "//", "../x", "a/../../b", `C:\x`, `\\srv\share`} {
+		if _, err := cleanDevicePath(bad); err == nil {
+			t.Errorf("cleanDevicePath(%q) accepted", bad)
+		}
+	}
+}
+
+func TestDeviceFiles(t *testing.T) {
+	s, h := deviceFixture(t)
+	ctx := context.Background()
+	if _, err := h.ListDeviceDir(ctx, s, "c1", "."); err == nil {
+		t.Fatal("unbound conversation listed")
+	}
+	d, _ := s.CreateDevice(ctx, store.Device{ID: "d1", UserID: "h1", TokenHash: "x"})
+	if err := s.SetConversationDevice(ctx, store.ConversationDevice{ConversationID: "c1", DeviceID: d.ID, WorkDir: "/w"}); err != nil {
+		t.Fatal(err)
+	}
+	var calls []string
+	var mu sync.Mutex
+	connect(h, d, DeviceHello{}, func(f DeviceFrame) DeviceFrame {
+		var p map[string]any
+		_ = json.Unmarshal(f.Params, &p)
+		mu.Lock()
+		calls = append(calls, f.Method+" "+p["root"].(string)+" "+p["path"].(string))
+		mu.Unlock()
+		switch f.Method {
+		case "list_dir":
+			return DeviceFrame{Type: "result", ID: f.ID, Result: json.RawMessage(`{"entries":[{"name":"a.txt","is_dir":false,"size":5,"modified_ms":1700000000000}]}`)}
+		case "read_file":
+			return DeviceFrame{Type: "result", ID: f.ID, Result: json.RawMessage(`{"size":5,"modified_ms":0,"data":"aGVsbG8="}`)}
+		}
+		return DeviceFrame{Type: "result", ID: f.ID, Error: "unsupported method " + f.Method}
+	})
+	listing, err := h.ListDeviceDir(ctx, s, "c1", "src/")
+	if err != nil || listing.Path != "src" || len(listing.Entries) != 1 || listing.Entries[0].Name != "a.txt" || listing.Entries[0].Modified.Unix() != 1700000000 {
+		t.Fatalf("listing = %+v, %v", listing, err)
+	}
+	file, err := h.ReadDeviceFile(ctx, s, "c1", "src/a.txt")
+	if err != nil || string(file.Data) != "hello" {
+		t.Fatalf("file = %+v, %v", file, err)
+	}
+	if _, err := h.ReadDeviceFile(ctx, s, "c1", "../etc/passwd"); err == nil {
+		t.Fatal("escaping path read")
+	}
+	if len(calls) != 2 || calls[0] != "list_dir /w src" || calls[1] != "read_file /w src/a.txt" {
+		t.Fatalf("calls = %v", calls)
 	}
 }

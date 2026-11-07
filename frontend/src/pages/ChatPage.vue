@@ -24,6 +24,8 @@ import ChatTranscript from "@/components/chat/ChatTranscript.vue";
 import ChatComposer from "@/components/chat/ChatComposer.vue";
 import ChatMobileHeader from "@/components/chat/ChatMobileHeader.vue";
 import WorkspacePanel from "@/components/WorkspacePanel.vue";
+import DeviceWorkspacePanel from "@/components/workspace/DeviceWorkspacePanel.vue";
+import { loadConversationDevice, useConversationDevice } from "@/composables/useConversationDevice";
 import { Button } from "@/components/ui/button";
 import type { Conversation } from "@/composables/apiTypes";
 import type { MessageAttachment } from "@/composables/useWebSocket";
@@ -240,6 +242,17 @@ function toggleMobileNotifications() {
 const chatPanelRef = ref<HTMLDivElement>();
 const composerRef = ref<InstanceType<typeof ChatComposer>>();
 const workspacePanelRef = ref<InstanceType<typeof WorkspacePanel>>();
+const deviceWorkspacePanelRef = ref<InstanceType<typeof DeviceWorkspacePanel>>();
+
+// A conversation bound to a folder on this computer (DayMug-Client only)
+// shows that folder in the file panel: it is where the agent's tools work.
+const deviceBinding = useConversationDevice(() => currentConversationId.value);
+watch(currentConversationId, (id) => void loadConversationDevice(id), { immediate: true });
+
+function refreshWorkspacePanel() {
+  workspacePanelRef.value?.refresh();
+  void deviceWorkspacePanelRef.value?.refresh();
+}
 const containerRef = ref<HTMLDivElement>();
 
 // The mobile and desktop layouts each render their own <ChatComposer>, so the
@@ -305,7 +318,7 @@ onMounted(async () => {
 });
 
 watch(resultVersion, () => {
-  workspacePanelRef.value?.refresh();
+  refreshWorkspacePanel();
 });
 
 // Refresh the workspace listing right after the user sends. The resultVersion
@@ -320,7 +333,7 @@ function handleSendMessage(text: string, attachments?: MessageAttachment[], inse
   } else {
     sendMessage(text);
   }
-  workspacePanelRef.value?.refresh();
+  refreshWorkspacePanel();
 }
 
 function handleScheduleMessage(
@@ -460,6 +473,12 @@ function trimTrailingSlashes(path: string): string {
         <div v-if="!currentUser" class="text-muted-foreground text-center py-10 px-4 text-sm">
           {{ t("chat.selectUserWorkspace") }}
         </div>
+        <DeviceWorkspacePanel
+          v-else-if="deviceBinding && currentConversationId"
+          ref="deviceWorkspacePanelRef"
+          :conversation-id="currentConversationId"
+          :binding="deviceBinding"
+        />
         <WorkspacePanel
           v-else
           ref="workspacePanelRef"
@@ -618,6 +637,14 @@ function trimTrailingSlashes(path: string): string {
         <div v-if="!currentUser" class="text-muted-foreground text-center py-10 px-5 text-sm">
           {{ t("chat.selectUserWorkspace") }}
         </div>
+        <DeviceWorkspacePanel
+          v-else-if="deviceBinding && currentConversationId"
+          ref="deviceWorkspacePanelRef"
+          :conversation-id="currentConversationId"
+          :binding="deviceBinding"
+          can-collapse
+          @collapse="collapseWorkspace"
+        />
         <WorkspacePanel
           v-else
           ref="workspacePanelRef"

@@ -923,6 +923,9 @@ func bridgeFingerprint(opts agent.RunRequest, req bridgeRequest) string {
 		write(string(mcp))
 	}
 	write(strings.Join(req.DisallowedTools, ","))
+	if req.SettingSources != nil {
+		write("settings:" + strings.Join(req.SettingSources, ","))
+	}
 	if aliases, err := json.Marshal(req.ToolAliases); err == nil {
 		write(string(aliases))
 	}

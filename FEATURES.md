@@ -164,6 +164,8 @@ Desktop is a three-pane workspace: a slim agent rail, the conversation list, the
 | Pairing | Silent: the logged-in page vouches for the client hosting it via a per-launch nonce |
 | Run location | Per conversation: server (default) or a folder on this computer, picked with the native dialog; recent folders one click away |
 | Tools on the device | Bash / Read / Write / Edit / Glob / Grep over an outbound WebSocket; server-side file and shell built-ins are removed for that conversation; runs automatically, no approval step |
+| File panel | A bound conversation's right-hand panel browses and previews that folder on the computer (read-only), not the server's workspace |
+| Instructions | A bound turn skips the server working directory's CLAUDE.md / project settings and loads CLAUDE.md / AGENTS.md / CLAUDE.local.md from the bound folder and its parents, plus `~/.claude/CLAUDE.md`, from the computer |
 | Providers | Claude on the Agent SDK transport; other transports refuse a bound turn |
 
 See `docs/guides/desktop-client.md`.

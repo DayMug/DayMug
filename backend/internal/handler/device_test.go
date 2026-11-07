@@ -124,3 +124,20 @@ func TestDeviceMCPProtocol(t *testing.T) {
 		t.Fatalf("unknown method = %s", rec.Body)
 	}
 }
+
+// Files from the user's computer must never render as an active document of
+// the server's origin.
+func TestDeviceFileContentType(t *testing.T) {
+	for _, tc := range []struct{ name, data, want string }{
+		{"a.png", "\x89PNG\r\n\x1a\n", "image/png"},
+		{"a.html", "<script>alert(1)</script>", "text/plain; charset=utf-8"},
+		{"a.svg", "<svg onload=alert(1)>", "text/plain; charset=utf-8"},
+		{"main.go", "package main\n", "text/plain; charset=utf-8"},
+		{"doc.pdf", "%PDF-1.7", "application/pdf"},
+		{"blob.bin", "\x00\x01\x02", "application/octet-stream"},
+	} {
+		if got := deviceFileContentType(tc.name, []byte(tc.data)); got != tc.want {
+			t.Errorf("%s: %q, want %q", tc.name, got, tc.want)
+		}
+	}
+}

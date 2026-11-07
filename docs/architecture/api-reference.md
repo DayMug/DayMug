@@ -186,6 +186,8 @@ Used only by DayMug-Client and the page it hosts; see [guides/desktop-client.md]
 | GET | `/devices/current?nonce=` | `{device}` hosting this page, or `{device: null}` |
 | POST | `/devices/:id/pick-folder` | Opens the native folder dialog on the device; `{path}` (empty when cancelled) |
 | GET/PUT/DELETE | `/conversations/:id/device` | Read / set `{device_id, work_dir}` (device must be online; the folder is canonicalised on it) / clear the conversation's binding |
+| GET | `/conversations/:id/device/files?path=` | `{root, path, entries[{name, is_dir, size, modified}], truncated}` of a directory in the bound folder (path relative to it; 404 unbound, 409 offline, 501 client too old) |
+| GET | `/conversations/:id/device/files/read?path=[&download=1]` | Raw bytes of a file in the bound folder (≤ 16 MiB); passive content types only, sandbox CSP |
 
 ## Authenticated: usage
 

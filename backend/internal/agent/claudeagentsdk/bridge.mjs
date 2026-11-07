@@ -143,6 +143,7 @@ function buildOptions(req, abortController, questions) {
   if (Array.isArray(req.disallowedTools) && req.disallowedTools.length > 0) {
     options.disallowedTools = [...(options.disallowedTools ?? []), ...req.disallowedTools];
   }
+  if (Array.isArray(req.settingSources)) options.settingSources = req.settingSources;
   if (req.toolAliases && Object.keys(req.toolAliases).length > 0) {
     options.toolAliases = req.toolAliases;
   }

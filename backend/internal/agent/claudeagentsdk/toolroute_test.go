@@ -11,9 +11,10 @@ import (
 func TestApplyToolRouteMergesAndOverrides(t *testing.T) {
 	req := bridgeRequest{MCPServers: map[string]any{"mine": "keep", "daymug_local": "spoof"}}
 	applyToolRoute(&req, &agent.ToolRoute{
-		MCPServers: map[string]any{"daymug_local": "device"},
-		Disallowed: []string{"Bash", "Read"},
-		Aliases:    map[string]string{"Bash": "mcp__daymug_local__Bash"},
+		MCPServers:     map[string]any{"daymug_local": "device"},
+		Disallowed:     []string{"Bash", "Read"},
+		Aliases:        map[string]string{"Bash": "mcp__daymug_local__Bash"},
+		SettingSources: []string{"user"},
 	})
 	if req.MCPServers["mine"] != "keep" || req.MCPServers["daymug_local"] != "device" {
 		t.Fatalf("mcp servers = %v", req.MCPServers)
@@ -21,10 +22,13 @@ func TestApplyToolRouteMergesAndOverrides(t *testing.T) {
 	if len(req.DisallowedTools) != 2 || req.ToolAliases["Bash"] != "mcp__daymug_local__Bash" {
 		t.Fatalf("route = %v %v", req.DisallowedTools, req.ToolAliases)
 	}
+	if len(req.SettingSources) != 1 || req.SettingSources[0] != "user" {
+		t.Fatalf("setting sources = %v", req.SettingSources)
+	}
 
 	plain := bridgeRequest{}
 	applyToolRoute(&plain, nil)
-	if plain.MCPServers != nil || plain.DisallowedTools != nil || plain.ToolAliases != nil {
+	if plain.MCPServers != nil || plain.DisallowedTools != nil || plain.ToolAliases != nil || plain.SettingSources != nil {
 		t.Fatalf("nil route changed the request: %+v", plain)
 	}
 }
@@ -36,5 +40,10 @@ func TestBridgeFingerprintCoversToolRoute(t *testing.T) {
 	applyToolRoute(&routed, &agent.ToolRoute{Disallowed: []string{"Bash"}, Aliases: map[string]string{"Bash": "x"}})
 	if bridgeFingerprint(agent.RunRequest{}, base) == bridgeFingerprint(agent.RunRequest{}, routed) {
 		t.Fatal("tool route not part of the fingerprint")
+	}
+	userOnly := routed
+	userOnly.SettingSources = []string{"user"}
+	if bridgeFingerprint(agent.RunRequest{}, routed) == bridgeFingerprint(agent.RunRequest{}, userOnly) {
+		t.Fatal("setting sources not part of the fingerprint")
 	}
 }

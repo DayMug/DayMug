@@ -5,11 +5,14 @@ import { Check, ChevronDown, FolderOpen, Laptop, Server } from "lucide-vue-next"
 import { useI18n } from "vue-i18n";
 import {
   clearConversationDevice,
-  fetchConversationDevice,
   pickDeviceFolder,
   setConversationDevice,
-  type ConversationDeviceBinding,
 } from "@/composables/apiDevices";
+import {
+  loadConversationDevice,
+  setConversationDeviceBinding,
+  useConversationDevice,
+} from "@/composables/useConversationDevice";
 import { useDesktopDevice } from "@/composables/useDesktopDevice";
 import { dirLabel, recentDesktopDirs, rememberDesktopDir } from "@/lib/desktopClient";
 import { errorMessage } from "@/lib/errorMessage";
@@ -23,21 +26,16 @@ const emit = defineEmits<{ (e: "error", message: string): void }>();
 const { t } = useI18n();
 const { device, ensureDesktopDevice } = useDesktopDevice();
 
-const binding = ref<ConversationDeviceBinding | null>(null);
+// Shared with the chat page, whose file panel follows this binding.
+const binding = useConversationDevice(() => props.conversationId);
 const open = ref(false);
 const busy = ref(false);
 const recent = ref<string[]>([]);
 const rootRef = ref<HTMLElement | null>(null);
 onClickOutside(rootRef, () => (open.value = false));
 
-async function load() {
-  const id = props.conversationId;
-  try {
-    const b = await fetchConversationDevice(id);
-    if (id === props.conversationId) binding.value = b;
-  } catch {
-    binding.value = null;
-  }
+function load() {
+  void loadConversationDevice(props.conversationId);
 }
 
 onMounted(() => {
@@ -85,8 +83,10 @@ async function run(action: () => Promise<void>) {
 async function bindTo(dir: string) {
   const d = await ensureDesktopDevice();
   if (!d) throw new Error(t("device.notPaired"));
-  binding.value = await setConversationDevice(props.conversationId, d.id, dir);
-  rememberDesktopDir(binding.value.work_dir);
+  const id = props.conversationId;
+  const b = await setConversationDevice(id, d.id, dir);
+  setConversationDeviceBinding(id, b);
+  rememberDesktopDir(b.work_dir);
 }
 
 function pickFolder() {
@@ -109,8 +109,9 @@ function useServer() {
   open.value = false;
   if (!binding.value) return;
   void run(async () => {
-    await clearConversationDevice(props.conversationId);
-    binding.value = null;
+    const id = props.conversationId;
+    await clearConversationDevice(id);
+    setConversationDeviceBinding(id, null);
   });
 }
 

@@ -274,6 +274,12 @@ type ToolRoute struct {
 	// Aliases resolves a model-emitted built-in name (e.g. "Bash", which a
 	// skill document may still tell the model to call) to its MCP stand-in.
 	Aliases map[string]string
+	// SettingSources, when non-nil, replaces the Claude Code setting sources
+	// the turn loads. A device-bound turn keeps only "user": "project" and
+	// "local" would read CLAUDE.md and settings from the server's working
+	// directory, while the device folder's own instruction files arrive in
+	// the system prompt instead.
+	SettingSources []string
 }
 
 // ErrToolRouteUnsupported is returned by adapters that cannot honour

@@ -91,6 +91,9 @@ type bridgeRequest struct {
 	// servers are merged into MCPServers.
 	DisallowedTools []string          `json:"disallowedTools,omitempty"`
 	ToolAliases     map[string]string `json:"toolAliases,omitempty"`
+	// SettingSources overrides the bridge's default setting sources when
+	// non-nil (RunRequest.ToolRoute.SettingSources).
+	SettingSources []string `json:"settingSources,omitempty"`
 	// Minimal strips the session down to a single cheap completion: no
 	// settings, no tools, no MCP, no session file, and SystemPrompt replaces
 	// the Claude Code preset instead of appending to it. Used by title
@@ -664,6 +667,9 @@ func applyToolRoute(req *bridgeRequest, route *agent.ToolRoute) {
 		req.MCPServers = merged
 	}
 	req.DisallowedTools = append([]string(nil), route.Disallowed...)
+	if route.SettingSources != nil {
+		req.SettingSources = append([]string{}, route.SettingSources...)
+	}
 	if len(route.Aliases) > 0 {
 		req.ToolAliases = make(map[string]string, len(route.Aliases))
 		for k, v := range route.Aliases {

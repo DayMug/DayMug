@@ -553,9 +553,69 @@ func (h *DeviceHub) ApplyDeviceRoute(ctx context.Context, s store.Store, opts *a
 		},
 		Disallowed: append([]string(nil), deviceRoutedTools...),
 		Aliases:    deviceToolAliases(tools),
+		// The server's working directory is not where this conversation
+		// works: its CLAUDE.md / .claude settings ("project", "local") must
+		// not steer the turn. The device folder's files are loaded below.
+		SettingSources: []string{"user"},
 	}
 	AppendSystem(opts, deviceSystemPrompt(binding, hello, online))
+	AppendSystem(opts, h.deviceInstructionsPrompt(ctx, s, binding, online))
 	return true
+}
+
+// deviceInstructionTimeout bounds how long a turn start waits for the client
+// to collect the bound folder's instruction files.
+const deviceInstructionTimeout = 5 * time.Second
+
+// DeviceInstructionFile is one instruction file the client collected.
+type DeviceInstructionFile struct {
+	Path    string `json:"path"`
+	Content string `json:"content"`
+}
+
+// deviceInstructionsPrompt replaces the CLAUDE.md the SDK would have read
+// from the server's working directory: the agent's DayMug-managed
+// instructions, then the CLAUDE.md / AGENTS.md files the client found from the
+// bound folder upwards. An offline or older client contributes nothing; the
+// turn still runs.
+func (h *DeviceHub) deviceInstructionsPrompt(ctx context.Context, s store.Store, b DeviceBinding, online bool) string {
+	var sb strings.Builder
+	if conv, err := s.GetConversation(ctx, b.ConversationID); err == nil {
+		if u, err := s.GetUser(ctx, conv.UserID); err == nil && u.ManageClaudeMd && strings.TrimSpace(u.ClaudeMdContent) != "" {
+			sb.WriteString("# Agent instructions\n\nConfigured for this agent in DayMug:\n\n")
+			sb.WriteString(strings.TrimSpace(u.ClaudeMdContent))
+			sb.WriteString("\n\n")
+		}
+	}
+	if online {
+		files := h.deviceInstructionFiles(ctx, b)
+		if len(files) > 0 {
+			sb.WriteString("# Project instructions from the user's computer\n\n")
+			sb.WriteString("These files were found on the user's computer, from the outermost directory down to the working directory; later files are more specific and win a conflict. Follow them like CLAUDE.md.\n")
+			for _, f := range files {
+				sb.WriteString("\nContents of `" + f.Path + "`:\n\n")
+				sb.WriteString(strings.TrimRight(f.Content, "\n"))
+				sb.WriteString("\n")
+			}
+		}
+	}
+	return strings.TrimRight(sb.String(), "\n")
+}
+
+func (h *DeviceHub) deviceInstructionFiles(ctx context.Context, b DeviceBinding) []DeviceInstructionFile {
+	callCtx, cancel := context.WithTimeout(ctx, deviceInstructionTimeout)
+	defer cancel()
+	raw, err := h.Call(callCtx, b.DeviceID, "project_instructions", map[string]string{"root": b.WorkDir})
+	if err != nil {
+		return nil
+	}
+	var res struct {
+		Files []DeviceInstructionFile `json:"files"`
+	}
+	if json.Unmarshal(raw, &res) != nil {
+		return nil
+	}
+	return res.Files
 }
 
 func deviceSystemPrompt(b DeviceBinding, hello DeviceHello, online bool) string {
@@ -579,7 +639,7 @@ func deviceSystemPrompt(b DeviceBinding, hello DeviceHello, online bool) string 
 	if hello.Home != "" {
 		sb.WriteString("- Home directory: `" + hello.Home + "`.\n")
 	}
-	sb.WriteString("- The working directory, platform, git status and CLAUDE.md content reported elsewhere in this prompt describe a different host you cannot reach; ignore them in favour of this section.\n")
+	sb.WriteString("- The working directory, platform and git status reported elsewhere in this prompt describe a different host you cannot reach; ignore them in favour of this section.\n")
 	sb.WriteString("- Files you create are already on the user's computer; refer to them by their path instead of publishing them as artifacts.\n")
 	if !online {
 		sb.WriteString("- The client was not connected when this turn started; if a tool reports it offline, ask the user to open DayMug-Client.\n")
@@ -644,4 +704,151 @@ func (h *DeviceHub) BindConversation(ctx context.Context, userID, convID, device
 // UnbindConversation returns a conversation to server execution.
 func (h *DeviceHub) UnbindConversation(ctx context.Context, convID string) error {
 	return h.store.ClearConversationDevice(ctx, convID)
+}
+
+// DeviceFileEntry is one row of a bound folder's listing, in the shape the
+// workspace panel's file API uses.
+type DeviceFileEntry struct {
+	Name     string    `json:"name"`
+	IsDir    bool      `json:"is_dir"`
+	Size     int64     `json:"size"`
+	Modified time.Time `json:"modified"`
+}
+
+// DeviceDirListing is a bound folder's directory listing.
+type DeviceDirListing struct {
+	Root      string            `json:"root"`
+	Path      string            `json:"path"`
+	Entries   []DeviceFileEntry `json:"entries"`
+	Truncated bool              `json:"truncated"`
+}
+
+// DeviceFile is a file read from a bound folder.
+type DeviceFile struct {
+	Size     int64
+	Modified time.Time
+	Data     []byte
+}
+
+// deviceFileTimeout bounds one file-panel request to the client.
+const deviceFileTimeout = 30 * time.Second
+
+// DeviceFileReadLimit caps a file the panel previews or downloads; it keeps a
+// base64-encoded result well under the socket's read limit.
+const DeviceFileReadLimit = 16 << 20
+
+// cleanDevicePath normalises a panel path relative to the bound folder. Only
+// forward-slash relative paths without ".." are accepted; the client confines
+// the resolved path to the folder again, symlinks included.
+func cleanDevicePath(p string) (string, error) {
+	p = strings.TrimSpace(strings.ReplaceAll(p, "\\", "/"))
+	if p == "" || p == "." {
+		return ".", nil
+	}
+	if strings.HasPrefix(p, "/") || strings.Contains(p, ":") {
+		return "", BadRequest("path must be relative to the bound folder")
+	}
+	parts := []string{}
+	for _, part := range strings.Split(p, "/") {
+		switch part {
+		case "", ".":
+		case "..":
+			return "", BadRequest("path must stay inside the bound folder")
+		default:
+			parts = append(parts, part)
+		}
+	}
+	if len(parts) == 0 {
+		return ".", nil
+	}
+	return strings.Join(parts, "/"), nil
+}
+
+func (h *DeviceHub) fileBinding(ctx context.Context, s store.Store, convID string) (DeviceBinding, error) {
+	b, ok := h.BindingFor(ctx, s, convID)
+	if !ok {
+		return DeviceBinding{}, NewServiceError(http.StatusNotFound, "conversation is not bound to a computer", nil)
+	}
+	if !h.Online(b.DeviceID) {
+		return DeviceBinding{}, NewServiceError(http.StatusConflict, ErrDeviceOffline.Error(), nil)
+	}
+	return b, nil
+}
+
+// deviceCallError maps a client failure: an unsupported method means the
+// client predates the file panel.
+func deviceCallError(err error) error {
+	if strings.Contains(err.Error(), "unsupported method") {
+		return NewServiceError(http.StatusNotImplemented, "update DayMug-Client to browse this computer's files", err)
+	}
+	return NewServiceError(http.StatusBadGateway, err.Error(), err)
+}
+
+// ListDeviceDir lists a directory of a conversation's bound folder.
+func (h *DeviceHub) ListDeviceDir(ctx context.Context, s store.Store, convID, path string) (DeviceDirListing, error) {
+	path, err := cleanDevicePath(path)
+	if err != nil {
+		return DeviceDirListing{}, err
+	}
+	b, err := h.fileBinding(ctx, s, convID)
+	if err != nil {
+		return DeviceDirListing{}, err
+	}
+	callCtx, cancel := context.WithTimeout(ctx, deviceFileTimeout)
+	defer cancel()
+	raw, err := h.Call(callCtx, b.DeviceID, "list_dir", map[string]string{"root": b.WorkDir, "path": path})
+	if err != nil {
+		return DeviceDirListing{}, deviceCallError(err)
+	}
+	var res struct {
+		Entries []struct {
+			Name       string `json:"name"`
+			IsDir      bool   `json:"is_dir"`
+			Size       int64  `json:"size"`
+			ModifiedMS int64  `json:"modified_ms"`
+		} `json:"entries"`
+		Truncated bool `json:"truncated"`
+	}
+	if err := json.Unmarshal(raw, &res); err != nil {
+		return DeviceDirListing{}, NewServiceError(http.StatusBadGateway, "device returned an invalid listing", err)
+	}
+	out := DeviceDirListing{Root: b.WorkDir, Path: path, Entries: make([]DeviceFileEntry, 0, len(res.Entries)), Truncated: res.Truncated}
+	for _, e := range res.Entries {
+		out.Entries = append(out.Entries, DeviceFileEntry{Name: e.Name, IsDir: e.IsDir, Size: e.Size, Modified: time.UnixMilli(e.ModifiedMS).UTC()})
+	}
+	return out, nil
+}
+
+// ReadDeviceFile reads a file of a conversation's bound folder.
+func (h *DeviceHub) ReadDeviceFile(ctx context.Context, s store.Store, convID, path string) (DeviceFile, error) {
+	path, err := cleanDevicePath(path)
+	if err != nil {
+		return DeviceFile{}, err
+	}
+	if path == "." {
+		return DeviceFile{}, BadRequest("path is a directory")
+	}
+	b, err := h.fileBinding(ctx, s, convID)
+	if err != nil {
+		return DeviceFile{}, err
+	}
+	callCtx, cancel := context.WithTimeout(ctx, deviceFileTimeout)
+	defer cancel()
+	raw, err := h.Call(callCtx, b.DeviceID, "read_file", map[string]any{"root": b.WorkDir, "path": path, "max_bytes": DeviceFileReadLimit})
+	if err != nil {
+		return DeviceFile{}, deviceCallError(err)
+	}
+	var res struct {
+		Size       int64  `json:"size"`
+		ModifiedMS int64  `json:"modified_ms"`
+		Data       string `json:"data"`
+	}
+	if err := json.Unmarshal(raw, &res); err != nil {
+		return DeviceFile{}, NewServiceError(http.StatusBadGateway, "device returned an invalid file", err)
+	}
+	data, err := base64.StdEncoding.DecodeString(res.Data)
+	if err != nil {
+		return DeviceFile{}, NewServiceError(http.StatusBadGateway, "device returned an invalid file", err)
+	}
+	return DeviceFile{Size: int64(len(data)), Modified: time.UnixMilli(res.ModifiedMS).UTC(), Data: data}, nil
 }

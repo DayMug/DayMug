@@ -1,3 +1,4 @@
+import { apiBase } from "./apiBase";
 import { jsonRequestInit, request } from "./apiClient";
 
 export interface DeviceView {
@@ -75,4 +76,51 @@ export async function clearConversationDevice(conversationId: string): Promise<v
     { method: "DELETE" },
     { label: "clear conversation device", expect: "none" },
   );
+}
+
+export interface DeviceFileEntry {
+  name: string;
+  is_dir: boolean;
+  size: number;
+  modified: string;
+}
+
+export interface DeviceDirListing {
+  root: string;
+  path: string;
+  entries: DeviceFileEntry[];
+  truncated: boolean;
+}
+
+// The bound folder of a conversation, browsed through the server's relay to
+// the desktop client. `path` is relative to that folder.
+export async function listDeviceFiles(
+  conversationId: string,
+  path: string,
+  signal?: AbortSignal,
+): Promise<DeviceDirListing> {
+  const params = new URLSearchParams({ path });
+  return request<DeviceDirListing>(
+    `/api/conversations/${encodeURIComponent(conversationId)}/device/files?${params}`,
+    { signal },
+    { label: "list device files" },
+  );
+}
+
+export async function readDeviceFile(
+  conversationId: string,
+  path: string,
+  signal?: AbortSignal,
+): Promise<Response> {
+  const params = new URLSearchParams({ path });
+  return request<Response>(
+    `/api/conversations/${encodeURIComponent(conversationId)}/device/files/read?${params}`,
+    { signal },
+    { label: "read device file", expect: "response" },
+  );
+}
+
+export function deviceFileDownloadUrl(conversationId: string, path: string): string {
+  const params = new URLSearchParams({ path, download: "1" });
+  return `${apiBase()}/api/conversations/${encodeURIComponent(conversationId)}/device/files/read?${params}`;
 }
