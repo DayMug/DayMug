@@ -312,6 +312,9 @@ func (h *DeviceHandler) SetConversationDevice(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request"})
 		return
 	}
+	if !h.deviceBindingMutable(c, conv.ID) {
+		return
+	}
 	b, err := h.Hub.BindConversation(c.Request.Context(), middleware.CurrentUserID(c), conv.ID, req.DeviceID, req.WorkDir)
 	if err != nil {
 		respondServiceError(c, err)
@@ -322,10 +325,39 @@ func (h *DeviceHandler) SetConversationDevice(c *gin.Context) {
 	}})
 }
 
+// deviceBindingMutable reports whether a conversation's run location may still
+// change, writing a 409 when it may not. Once a conversation bound to a
+// folder on a computer has a model reply (Store.HasModelReply), its history
+// refers to that folder's files and commands, so the folder is fixed: it can
+// be viewed but neither swapped nor dropped back to the server.
+func (h *DeviceHandler) deviceBindingMutable(c *gin.Context, convID string) bool {
+	ctx := c.Request.Context()
+	if _, err := h.Store.GetConversationDevice(ctx, convID); err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			return true
+		}
+		respondInternalError(c, "devices", err)
+		return false
+	}
+	started, err := h.Store.HasModelReply(ctx, convID)
+	if err != nil {
+		respondInternalError(c, "devices", err)
+		return false
+	}
+	if started {
+		c.JSON(http.StatusConflict, gin.H{"error": "cannot change the folder after the conversation has started"})
+		return false
+	}
+	return true
+}
+
 // ClearConversationDevice returns the conversation to server execution.
 func (h *DeviceHandler) ClearConversationDevice(c *gin.Context) {
 	conv, ok := loadOwnedConversation(c, h.Store, c.Param("id"))
 	if !ok {
+		return
+	}
+	if !h.deviceBindingMutable(c, conv.ID) {
 		return
 	}
 	if err := h.Hub.UnbindConversation(c.Request.Context(), conv.ID); err != nil {

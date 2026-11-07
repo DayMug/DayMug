@@ -192,3 +192,55 @@ func TestDeviceActivity(t *testing.T) {
 		t.Fatalf("running = %+v", body.Running)
 	}
 }
+
+func TestConversationDeviceLockedAfterReply(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	s := storetest.New()
+	ctx := context.Background()
+	for _, u := range []store.User{{ID: "h1", Username: "alice"}, {ID: "a1", OwnerID: "h1"}} {
+		if err := s.CreateUser(ctx, u); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := s.CreateConversation(ctx, "c1", "", "a1", "", "claude", ""); err != nil {
+		t.Fatal(err)
+	}
+	_, _ = s.CreateDevice(ctx, store.Device{ID: "d1", UserID: "h1", TokenHash: "x"})
+	bind := func() {
+		if err := s.SetConversationDevice(ctx, store.ConversationDevice{ConversationID: "c1", DeviceID: "d1", WorkDir: "/w"}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	h := &DeviceHandler{Store: s, Hub: service.NewDeviceHub(s)}
+	engine := gin.New()
+	engine.Use(func(c *gin.Context) { c.Set("auth_user_id", "h1") })
+	engine.PUT("/api/conversations/:id/device", h.SetConversationDevice)
+	engine.DELETE("/api/conversations/:id/device", h.ClearConversationDevice)
+	do := func(method, body string) *httptest.ResponseRecorder {
+		req := httptest.NewRequest(method, "/api/conversations/c1/device", strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		engine.ServeHTTP(w, req)
+		return w
+	}
+
+	// Bound but not yet answered: the folder can still be dropped.
+	bind()
+	if w := do(http.MethodDelete, ""); w.Code != http.StatusNoContent {
+		t.Fatalf("unbind before reply: %d %s", w.Code, w.Body)
+	}
+
+	bind()
+	if err := s.SaveMessage(ctx, store.Message{ID: "m1", ConversationID: "c1", Role: "assistant", Content: "done"}); err != nil {
+		t.Fatal(err)
+	}
+	if w := do(http.MethodDelete, ""); w.Code != http.StatusConflict {
+		t.Fatalf("unbind after reply: %d %s", w.Code, w.Body)
+	}
+	if w := do(http.MethodPut, `{"device_id":"d1","work_dir":"/other"}`); w.Code != http.StatusConflict {
+		t.Fatalf("rebind after reply: %d %s", w.Code, w.Body)
+	}
+	if b, err := s.GetConversationDevice(ctx, "c1"); err != nil || b.WorkDir != "/w" {
+		t.Fatalf("binding changed: %+v %v", b, err)
+	}
+}

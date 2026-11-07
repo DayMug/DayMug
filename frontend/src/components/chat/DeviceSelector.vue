@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from "vue";
 import { onClickOutside } from "@vueuse/core";
-import { Check, ChevronDown, FolderOpen, Laptop, Server } from "lucide-vue-next";
+import { Check, ChevronDown, FolderOpen, Laptop, Lock, Server, X } from "lucide-vue-next";
 import { useI18n } from "vue-i18n";
 import {
   clearConversationDevice,
@@ -14,13 +14,23 @@ import {
   useConversationDevice,
 } from "@/composables/useConversationDevice";
 import { useDesktopDevice } from "@/composables/useDesktopDevice";
-import { dirLabel, recentDesktopDirs, rememberDesktopDir } from "@/lib/desktopClient";
+import {
+  dirLabel,
+  forgetDesktopDir,
+  recentDesktopDirs,
+  rememberDesktopDir,
+} from "@/lib/desktopClient";
 import { errorMessage } from "@/lib/errorMessage";
 
 // Where this conversation's tools run: the server (the default, and the only
 // option a browser ever has) or a folder on the computer hosting this page.
 // Rendered by the composer only inside DayMug-Client.
-const props = defineProps<{ conversationId: string }>();
+const props = defineProps<{
+  conversationId: string;
+  // The model has replied (ChatPage's conversationStarted). Together with a
+  // folder binding this fixes the folder: the server refuses to change it.
+  conversationStarted?: boolean;
+}>();
 const emit = defineEmits<{ (e: "error", message: string): void }>();
 
 const { t } = useI18n();
@@ -47,6 +57,8 @@ watch(() => props.conversationId, load, { immediate: true });
 const boundHere = computed(
   () => !!binding.value && !!device.value && binding.value.device_id === device.value.id,
 );
+// The history now refers to this folder's files, so the menu only shows it.
+const locked = computed(() => !!binding.value && !!props.conversationStarted);
 const online = computed(() => (boundHere.value ? !!device.value?.online : !!binding.value?.online));
 
 const triggerLabel = computed(() => {
@@ -54,11 +66,14 @@ const triggerLabel = computed(() => {
   const dir = dirLabel(binding.value.work_dir);
   return boundHere.value ? dir : `${binding.value.device_name} · ${dir}`;
 });
-const triggerTitle = computed(() =>
-  binding.value
-    ? t("device.boundTitle", { name: binding.value.device_name, dir: binding.value.work_dir })
-    : t("device.serverTitle"),
-);
+const triggerTitle = computed(() => {
+  if (!binding.value) return t("device.serverTitle");
+  const title = t("device.boundTitle", {
+    name: binding.value.device_name,
+    dir: binding.value.work_dir,
+  });
+  return locked.value ? `${title}\n${t("device.lockedNote")}` : title;
+});
 
 function toggle() {
   open.value = !open.value;
@@ -91,6 +106,7 @@ async function bindTo(dir: string) {
 
 function pickFolder() {
   open.value = false;
+  if (locked.value) return;
   void run(async () => {
     const d = await ensureDesktopDevice();
     if (!d) throw new Error(t("device.notPaired"));
@@ -100,14 +116,20 @@ function pickFolder() {
   });
 }
 
+function removeRecent(dir: string) {
+  forgetDesktopDir(dir);
+  recent.value = recentDesktopDirs();
+}
+
 function pickRecent(dir: string) {
   open.value = false;
+  if (locked.value) return;
   void run(() => bindTo(dir));
 }
 
 function useServer() {
   open.value = false;
-  if (!binding.value) return;
+  if (!binding.value || locked.value) return;
   void run(async () => {
     const id = props.conversationId;
     await clearConversationDevice(id);
@@ -117,6 +139,9 @@ function useServer() {
 
 const menuRowClass =
   "flex w-full items-center gap-1.5 rounded-lg px-2 py-1.5 text-left text-xs outline-none transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:bg-accent disabled:pointer-events-none disabled:opacity-50";
+// The recent row's hover lives on its wrapper, so the remove button shares it.
+const recentRowClass =
+  "flex min-w-0 flex-1 items-center gap-1.5 rounded-lg px-2 py-1.5 text-left text-xs outline-none focus-visible:bg-accent";
 </script>
 
 <template>
@@ -156,6 +181,7 @@ const menuRowClass =
     >
       <p class="px-2 py-1 text-[11px] text-muted-foreground">{{ t("device.heading") }}</p>
       <button
+        v-if="!locked"
         type="button"
         role="menuitem"
         :class="menuRowClass"
@@ -166,41 +192,68 @@ const menuRowClass =
         <span class="truncate">{{ t("device.server") }}</span>
         <Check v-if="!binding" class="ml-auto size-3 shrink-0 opacity-70" />
       </button>
-      <button
+      <div
         v-if="binding"
-        type="button"
         role="menuitem"
-        :class="menuRowClass"
-        disabled
+        aria-disabled="true"
+        class="flex w-full items-center gap-1.5 rounded-lg px-2 py-1.5 text-xs"
+        :class="locked ? '' : 'opacity-50'"
         data-testid="device-option-current"
       >
         <Laptop class="size-3 shrink-0 opacity-70" />
-        <span class="truncate font-mono" :title="binding.work_dir">{{ binding.work_dir }}</span>
-        <Check class="ml-auto size-3 shrink-0 opacity-70" />
-      </button>
-      <template v-for="dir in recent" :key="dir">
+        <span class="truncate font-mono select-text" :title="binding.work_dir">{{
+          binding.work_dir
+        }}</span>
+        <Lock v-if="locked" class="ml-auto size-3 shrink-0 opacity-70" />
+        <Check v-else class="ml-auto size-3 shrink-0 opacity-70" />
+      </div>
+      <p
+        v-if="locked"
+        class="px-2 pt-0.5 pb-1.5 text-[11px] leading-snug text-muted-foreground"
+        data-testid="device-locked-note"
+      >
+        {{ t("device.lockedNote") }}
+      </p>
+      <template v-else>
+        <template v-for="dir in recent" :key="dir">
+          <div
+            v-if="!boundHere || dir !== binding?.work_dir"
+            class="group flex items-center rounded-lg hover:bg-accent hover:text-accent-foreground"
+            data-testid="device-recent-row"
+          >
+            <button
+              type="button"
+              role="menuitem"
+              :class="recentRowClass"
+              data-testid="device-option-recent"
+              @click="pickRecent(dir)"
+            >
+              <Laptop class="size-3 shrink-0 opacity-40" />
+              <span class="truncate font-mono" :title="dir">{{ dir }}</span>
+            </button>
+            <button
+              type="button"
+              class="mr-1 flex size-5 shrink-0 items-center justify-center rounded text-muted-foreground opacity-60 transition-opacity hover:bg-background hover:text-foreground hover:opacity-100 focus-visible:opacity-100"
+              :title="t('device.removeRecent')"
+              :aria-label="t('device.removeRecent')"
+              data-testid="device-recent-remove"
+              @click.stop="removeRecent(dir)"
+            >
+              <X class="size-3" />
+            </button>
+          </div>
+        </template>
         <button
-          v-if="!boundHere || dir !== binding?.work_dir"
           type="button"
           role="menuitem"
           :class="menuRowClass"
-          data-testid="device-option-recent"
-          @click="pickRecent(dir)"
+          data-testid="device-option-pick"
+          @click="pickFolder"
         >
-          <Laptop class="size-3 shrink-0 opacity-40" />
-          <span class="truncate font-mono" :title="dir">{{ dir }}</span>
+          <FolderOpen class="size-3 shrink-0 opacity-70" />
+          <span class="truncate">{{ t("device.pickFolder") }}</span>
         </button>
       </template>
-      <button
-        type="button"
-        role="menuitem"
-        :class="menuRowClass"
-        data-testid="device-option-pick"
-        @click="pickFolder"
-      >
-        <FolderOpen class="size-3 shrink-0 opacity-70" />
-        <span class="truncate">{{ t("device.pickFolder") }}</span>
-      </button>
     </div>
   </div>
 </template>

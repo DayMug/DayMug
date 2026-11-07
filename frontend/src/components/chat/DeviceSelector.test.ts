@@ -24,10 +24,10 @@ const device = {
   online: true,
 };
 
-function mountSelector() {
+function mountSelector(conversationStarted = false) {
   const i18n = createI18n({ legacy: false, locale: "en", messages: { en } });
   return mount(DeviceSelector, {
-    props: { conversationId: "c1" },
+    props: { conversationId: "c1", conversationStarted },
     global: { plugins: [i18n] },
     attachTo: document.body,
   });
@@ -89,6 +89,49 @@ describe("DeviceSelector", () => {
     await flushPromises();
     expect(api.clearConversationDevice).toHaveBeenCalledWith("c1");
     expect(wrapper.get('[data-testid="device-selector-label"]').text()).toBe("Server");
+    wrapper.unmount();
+  });
+
+  it("only shows the folder once a bound conversation has started", async () => {
+    localStorage.setItem("daymug.desktop.recentDirs", JSON.stringify(["/w", "/other"]));
+    api.fetchConversationDevice.mockResolvedValue({
+      device_id: "d1",
+      device_name: "mbp",
+      work_dir: "/w",
+      online: true,
+    });
+    const wrapper = mountSelector(true);
+    await flushPromises();
+    await wrapper.get('[data-testid="device-selector-trigger"]').trigger("click");
+    expect(wrapper.get('[data-testid="device-option-current"]').text()).toContain("/w");
+    expect(wrapper.find('[data-testid="device-locked-note"]').exists()).toBe(true);
+    for (const id of ["device-option-server", "device-option-recent", "device-option-pick"]) {
+      expect(wrapper.find(`[data-testid="${id}"]`).exists()).toBe(false);
+    }
+    wrapper.unmount();
+  });
+
+  it("keeps a started conversation switchable while it runs on the server", async () => {
+    const wrapper = mountSelector(true);
+    await flushPromises();
+    await wrapper.get('[data-testid="device-selector-trigger"]').trigger("click");
+    expect(wrapper.find('[data-testid="device-option-pick"]').exists()).toBe(true);
+    expect(wrapper.find('[data-testid="device-locked-note"]').exists()).toBe(false);
+    wrapper.unmount();
+  });
+
+  it("removes a folder from the recent list", async () => {
+    localStorage.setItem("daymug.desktop.recentDirs", JSON.stringify(["/a", "/b"]));
+    const wrapper = mountSelector();
+    await flushPromises();
+    await wrapper.get('[data-testid="device-selector-trigger"]').trigger("click");
+    expect(wrapper.findAll('[data-testid="device-option-recent"]')).toHaveLength(2);
+    await wrapper.findAll('[data-testid="device-recent-remove"]')[0]!.trigger("click");
+    const rows = wrapper.findAll('[data-testid="device-option-recent"]');
+    expect(rows.map((r) => r.text())).toEqual(["/b"]);
+    expect(wrapper.find('[data-testid="device-selector-menu"]').exists()).toBe(true);
+    expect(JSON.parse(localStorage.getItem("daymug.desktop.recentDirs") ?? "[]")).toEqual(["/b"]);
+    expect(api.setConversationDevice).not.toHaveBeenCalled();
     wrapper.unmount();
   });
 });

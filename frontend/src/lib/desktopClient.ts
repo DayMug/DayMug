@@ -52,6 +52,14 @@ export function rememberDesktopDir(dir: string) {
   }
 }
 
+export function forgetDesktopDir(dir: string) {
+  try {
+    localStorage.setItem(RECENT_KEY, JSON.stringify(recentDesktopDirs().filter((d) => d !== dir)));
+  } catch {
+    // Storage disabled: nothing to forget.
+  }
+}
+
 // Last path segment, for both POSIX and Windows paths.
 export function dirLabel(path: string): string {
   const trimmed = path.replace(/[\\/]+$/, "");

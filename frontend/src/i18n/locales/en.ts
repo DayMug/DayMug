@@ -593,6 +593,9 @@ export default {
       "View only: this conversation runs in a folder on {name}. Continue it in DayMug-Client on that computer.",
     notPaired: "This computer is not connected to DayMug yet; try again in a moment",
     failed: "Could not change where this conversation runs",
+    lockedNote:
+      "The folder is fixed once the conversation has started; start a new conversation to use another one.",
+    removeRecent: "Remove from recent folders",
   },
   deviceFiles: {
     title: "Files of {dir} on {name}",

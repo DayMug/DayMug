@@ -52,6 +52,7 @@ const inDesktopClient = desktopClient() !== null;
     <DeviceSelector
       v-if="inDesktopClient && conversation"
       :conversation-id="conversation.id"
+      :conversation-started="conversationStarted"
       @error="emit('error', $event)"
     />
     <span v-if="error" class="min-w-0 truncate text-[11px] text-destructive" :title="error">{{

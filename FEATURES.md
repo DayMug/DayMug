@@ -164,7 +164,7 @@ Desktop is a three-pane workspace: a slim agent rail, the conversation list, the
 | One driver | A bound conversation is driven only from the client on that computer; a browser or another computer sees it view-only (no composer, no file panel), and the server refuses their prompts |
 | Closing | Closing or quitting the client while one of its bound conversations is running asks first; otherwise it closes at once |
 | Pairing | Silent: the logged-in page vouches for the client hosting it via a per-launch nonce |
-| Run location | Per conversation: server (default) or a folder on this computer, picked with the native dialog; recent folders one click away |
+| Run location | Per conversation: server (default) or a folder on this computer, picked with the native dialog; recent folders one click away and removable from the list. Fixed once the model has replied in a bound conversation (view-only selector, server returns 409) |
 | Tools on the device | Bash / Read / Write / Edit / Glob / Grep over an outbound WebSocket; server-side file and shell built-ins are removed for that conversation; runs automatically, no approval step |
 | File panel | A bound conversation's right-hand panel browses and previews that folder on the computer (read-only), not the server's workspace |
 | Instructions | A bound turn skips the server working directory's CLAUDE.md / project settings and loads CLAUDE.md / AGENTS.md / CLAUDE.local.md from the bound folder and its parents, plus `~/.claude/CLAUDE.md`, from the computer |

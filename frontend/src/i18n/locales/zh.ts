@@ -550,6 +550,8 @@ export default {
       "仅可查看：此对话在 {name} 的本地文件夹中运行，请在那台电脑的 DayMug 客户端中继续。",
     notPaired: "本机尚未连接到 DayMug，请稍后再试",
     failed: "无法切换此对话的运行位置",
+    lockedNote: "对话开始后工作目录已固定，如需使用其他文件夹请新建对话。",
+    removeRecent: "从最近使用中移除",
   },
   deviceFiles: {
     title: "{name} 上 {dir} 的文件",
