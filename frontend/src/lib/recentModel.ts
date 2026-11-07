@@ -15,7 +15,7 @@ function isThinkLevel(value: unknown): value is ThinkLevel {
   );
 }
 
-function isValidPair(value: unknown): value is RecentModel {
+export function isRecentModel(value: unknown): value is RecentModel {
   if (!value || typeof value !== "object") return false;
   const v = value as Partial<RecentModel>;
   return (
@@ -32,7 +32,7 @@ export function loadRecentModel(): RecentModel | null {
     const raw = localStorage.getItem(RECENT_MODEL_STORAGE_KEY);
     if (!raw) return null;
     const parsed = JSON.parse(raw) as unknown;
-    return isValidPair(parsed) ? parsed : null;
+    return isRecentModel(parsed) ? parsed : null;
   } catch {
     return null;
   }
@@ -51,7 +51,7 @@ export function saveRecentModel(
     ...(trimmedAccount ? { account: trimmedAccount } : {}),
     ...(thinkLevel !== undefined ? { think_level: thinkLevel } : {}),
   };
-  if (!isValidPair(value)) return;
+  if (!isRecentModel(value)) return;
   try {
     localStorage.setItem(RECENT_MODEL_STORAGE_KEY, JSON.stringify(value));
   } catch {

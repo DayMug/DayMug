@@ -6,6 +6,7 @@ import { updateConversationModel } from "@/composables/apiConversations";
 import { loadModelRegistry, useModelRegistry } from "@/composables/useModelRegistry";
 import type { Conversation, ThinkLevel } from "@/composables/apiTypes";
 import { saveRecentModel } from "@/lib/recentModel";
+import { saveAgentModel } from "@/lib/agentPrefs";
 import { useI18n } from "vue-i18n";
 import { errorMessage } from "@/lib/errorMessage";
 import { displayModelName } from "@/lib/modelName";
@@ -212,12 +213,16 @@ async function applySelection(
   saving.value = true;
   try {
     const updated = await updateConversationModel(conv.id, provider, model, account, thinkLevel);
-    saveRecentModel(
-      updated.provider,
-      updated.model,
-      updated.account_name || account,
-      updated.think_level ?? thinkLevel,
-    );
+    const pickedAccount = updated.account_name || account;
+    const pickedThink = updated.think_level ?? thinkLevel;
+    saveRecentModel(updated.provider, updated.model, pickedAccount, pickedThink);
+    // Also per agent: the next conversation with this agent starts here.
+    saveAgentModel(updated.user_id || conv.user_id, {
+      provider: updated.provider,
+      model: updated.model,
+      ...(pickedAccount ? { account: pickedAccount } : {}),
+      think_level: pickedThink,
+    });
     emit("updated", updated);
   } catch (err) {
     emit("error", errorMessage(err, t("modelSelector.updateFailed")));

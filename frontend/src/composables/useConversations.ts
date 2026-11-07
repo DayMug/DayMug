@@ -29,6 +29,10 @@ import {
 import { useChat, bindConversationLookup } from "./useChat";
 import { clearDraft } from "@/lib/chatDrafts";
 import { loadRecentModel } from "@/lib/recentModel";
+import { loadAgentPrefs, type AgentRunLocation } from "@/lib/agentPrefs";
+import { setConversationDevice } from "./apiDevices";
+import { setConversationDeviceBinding } from "./useConversationDevice";
+import { ensureDesktopDevice } from "./useDesktopDevice";
 import { dropAttention } from "@/stores/conversationAttentionStore";
 
 const BROWSER_SYNC_CHANNEL = "daymug-conversations";
@@ -535,11 +539,33 @@ function applyTitleUpdate(id: string, title: string) {
   updateInAgentMap(id, (c) => ({ ...c, title }));
 }
 
+// A new conversation starts where the agent's previous one ran: a folder on
+// this computer when the user last bound this agent to one, the server
+// otherwise. Only this computer can honour a folder binding — on another
+// device, or in a plain browser, the memory is simply left alone until the
+// user is back where the folder lives. Best-effort: a failed bind leaves the
+// conversation on the server rather than failing the create.
+async function restoreRunLocation(conv: Conversation, location: AgentRunLocation | undefined) {
+  if (location?.kind !== "device") return;
+  try {
+    const device = await ensureDesktopDevice();
+    if (!device || device.id !== location.device_id) return;
+    const binding = await setConversationDevice(conv.id, device.id, location.work_dir);
+    setConversationDeviceBinding(conv.id, binding);
+  } catch {
+    // Left on the server; the selector still shows the truth.
+  }
+}
+
 async function createNewConversation(userId: string) {
   if (isCreatingConversation.value) return;
   isCreatingConversation.value = true;
   try {
-    const recent = loadRecentModel();
+    // The agent's own last model wins over the browser-wide one: agents are
+    // often set up on different providers, and the global entry only says
+    // what was picked most recently anywhere.
+    const prefs = loadAgentPrefs(userId);
+    const recent = prefs.model ?? loadRecentModel();
     let conv: Conversation;
     try {
       conv = recent
@@ -562,6 +588,7 @@ async function createNewConversation(userId: string) {
     // the row. An unconditional unshift here would then duplicate it
     // in the sidebar.
     applyRemoteAdded(conv, { broadcast: true });
+    await restoreRunLocation(conv, prefs.location);
     // Only refresh the per-agent cache from the active list when the
     // create was for the currently displayed agent — otherwise (the
     // mid-flight agent-switch race) conversations.value is some other

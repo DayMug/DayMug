@@ -21,12 +21,16 @@ import {
   rememberDesktopDir,
 } from "@/lib/desktopClient";
 import { errorMessage } from "@/lib/errorMessage";
+import { saveAgentLocation } from "@/lib/agentPrefs";
 
 // Where this conversation's tools run: the server (the default, and the only
 // option a browser ever has) or a folder on the computer hosting this page.
 // Rendered by the composer only inside DayMug-Client.
 const props = defineProps<{
   conversationId: string;
+  // The agent the conversation belongs to; its next conversation starts in
+  // whatever location the user picks here.
+  agentId?: string;
   // The model has replied (ChatPage's conversationStarted). Together with a
   // folder binding this fixes the folder: the server refuses to change it.
   conversationStarted?: boolean;
@@ -102,6 +106,13 @@ async function bindTo(dir: string) {
   const b = await setConversationDevice(id, d.id, dir);
   setConversationDeviceBinding(id, b);
   rememberDesktopDir(b.work_dir);
+  if (props.agentId) {
+    saveAgentLocation(props.agentId, {
+      kind: "device",
+      device_id: b.device_id,
+      work_dir: b.work_dir,
+    });
+  }
 }
 
 function pickFolder() {
@@ -134,6 +145,7 @@ function useServer() {
     const id = props.conversationId;
     await clearConversationDevice(id);
     setConversationDeviceBinding(id, null);
+    if (props.agentId) saveAgentLocation(props.agentId, { kind: "server" });
   });
 }
 

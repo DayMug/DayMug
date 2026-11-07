@@ -52,6 +52,7 @@ const inDesktopClient = desktopClient() !== null;
     <DeviceSelector
       v-if="inDesktopClient && conversation"
       :conversation-id="conversation.id"
+      :agent-id="conversation.user_id"
       :conversation-started="conversationStarted"
       @error="emit('error', $event)"
     />
