@@ -651,13 +651,40 @@ func (h *DeviceHub) CallTool(ctx context.Context, s store.Store, convID, name st
 	if len(arguments) == 0 || string(arguments) == "null" {
 		arguments = json.RawMessage("{}")
 	}
-	raw, err := h.Call(ctx, binding.DeviceID, "tool", map[string]any{
-		"name": name, "arguments": arguments, "cwd": binding.WorkDir,
-	})
+	params := map[string]any{"name": name, "arguments": arguments, "cwd": binding.WorkDir}
+	if env := deviceRunEnv(ctx, s, convID); len(env) > 0 {
+		params["env"] = env
+	}
+	raw, err := h.Call(ctx, binding.DeviceID, "tool", params)
 	if err != nil {
 		return DeviceToolError(err.Error()), nil
 	}
 	return raw, nil
+}
+
+// deviceRunEnv is the self-service environment a server-side run of the
+// conversation's agent would inherit (owner's variables, then the agent's own
+// overrides — see NewOneshotRunRequest), so a command run on the bound
+// computer sees the same variables. Provider account env is not included: it
+// carries the server's CLI credentials, not anything the user configured.
+// PATH is dropped because a value written for the server would replace the
+// computer's own search path and break every command there.
+func deviceRunEnv(ctx context.Context, s store.Store, convID string) map[string]string {
+	conv, err := s.GetConversation(ctx, convID)
+	if err != nil {
+		return nil
+	}
+	user, err := s.GetUser(ctx, conv.UserID)
+	if err != nil {
+		return nil
+	}
+	var opts agent.RunRequest
+	mergeUserEnvIntoRequest(&opts, runEnvFor(ctx, s, user))
+	if user.Username == "" {
+		mergeUserEnvIntoRequest(&opts, user.Env)
+	}
+	delete(opts.AccountEnv, "PATH")
+	return opts.AccountEnv
 }
 
 // DeviceToolError is an MCP CallToolResult reporting msg as a tool error.

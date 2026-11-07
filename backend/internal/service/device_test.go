@@ -364,6 +364,26 @@ func TestApplyDeviceRouteServesNativeToolTransports(t *testing.T) {
 	if called["name"] != "Bash" || called["cwd"] != "/home/me/proj" {
 		t.Fatalf("device received %v", called)
 	}
+	if _, ok := called["env"]; ok {
+		t.Fatalf("env sent without any configured: %v", called["env"])
+	}
+
+	// The owner's and the agent's self-service variables reach the device,
+	// the agent's winning; PATH stays the computer's own.
+	if err := s.SetUserEnv(ctx, "h1", "SHARED=owner\nOWNER_ONLY=1\nPATH=/srv/bin"); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SetUserEnv(ctx, "a1", "SHARED=agent\nAGENT_ONLY=2"); err != nil {
+		t.Fatal(err)
+	}
+	called = nil
+	if _, err := route.Call(ctx, "Bash", json.RawMessage(`{"command":"env"}`)); err != nil {
+		t.Fatal(err)
+	}
+	env, _ := called["env"].(map[string]any)
+	if env["SHARED"] != "agent" || env["OWNER_ONLY"] != "1" || env["AGENT_ONLY"] != "2" || env["PATH"] != nil {
+		t.Fatalf("device env = %v", called["env"])
+	}
 
 	// Unbinding mid-turn applies to the next call of a route already handed out.
 	if err := s.ClearConversationDevice(ctx, "c1"); err != nil {

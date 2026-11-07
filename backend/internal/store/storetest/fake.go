@@ -1171,6 +1171,11 @@ func (m *Fake) GetOwner(ctx context.Context, user store.User) (store.User, error
 	if user.Username != "" {
 		return user, nil
 	}
+	// OwnerID is what the SQLite store reads; the email match is kept for
+	// fixtures that link an agent to its human only that way.
+	if user.OwnerID != "" {
+		return m.GetUser(ctx, user.OwnerID)
+	}
 	if user.Email == "" {
 		return store.User{}, store.ErrNotFound
 	}
