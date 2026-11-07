@@ -23,6 +23,10 @@ const (
 	ItemFileChange
 	ItemMcpToolCall
 	ItemWebSearch
+	// ItemDynamicToolCall is a tool the client registered on the thread
+	// (DayMug-Client's device tools); it renders as the tool it is, so a
+	// device Bash call reads like any other Bash card.
+	ItemDynamicToolCall
 )
 
 // FileChange is one path touched by a patch.
@@ -63,6 +67,11 @@ type Item struct {
 
 	// Web search.
 	Query string
+
+	// Dynamic tool call: ResultText is the joined text of its content items,
+	// Failed whether the client reported the call unsuccessful.
+	ResultText string
+	Failed     bool
 }
 
 // ItemEvents translates one item lifecycle notification into DayMug's tool
@@ -97,6 +106,8 @@ func ItemEvents(it Item, started bool) []agent.StreamEvent {
 			})
 		}
 		return mcpResult(it, name)
+	case ItemDynamicToolCall:
+		return dynamicToolEvents(it, started)
 	case ItemWebSearch:
 		if started {
 			return streamcommon.Event(agent.KindToolUseStart, map[string]any{
@@ -173,6 +184,33 @@ func mcpArguments(it Item) map[string]any {
 		}
 	}
 	return input
+}
+
+func dynamicToolEvents(it Item, started bool) []agent.StreamEvent {
+	name := it.Tool
+	if name == "" {
+		name = "DynamicToolCall"
+	}
+	input := map[string]any{}
+	if len(it.Arguments) > 0 && string(it.Arguments) != "null" {
+		_ = json.Unmarshal(it.Arguments, &input)
+	}
+	if started {
+		return streamcommon.Event(agent.KindToolUseStart, map[string]any{"id": it.ID, "name": name, "input": input})
+	}
+	body := strings.TrimSpace(it.ResultText)
+	if it.ErrorMessage != "" {
+		body = it.ErrorMessage
+	}
+	if body == "" {
+		body = fmt.Sprintf("(%s)", it.Status)
+	}
+	if it.Failed && !strings.HasPrefix(body, "Error") {
+		body = "Error: " + body
+	}
+	return streamcommon.Event(agent.KindToolResult, map[string]any{
+		"id": it.ID, "name": name, "content": Truncate(body), "input": input,
+	})
 }
 
 func changedPaths(changes []FileChange) []string {

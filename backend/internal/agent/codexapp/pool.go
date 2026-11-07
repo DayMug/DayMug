@@ -172,7 +172,18 @@ func (p *serverPool) get(ctx context.Context, opts agent.RunRequest, workDir str
 // already held for the caller — one critical section, so the new server can't
 // be reclaimed between publish and acquire.
 func (p *serverPool) start(ctx context.Context, key string, opts agent.RunRequest, workDir string) (*accountServer, func(), error) {
-	srv, err := startAccountServer(ctx, opts, workDir, compatibleProviderArgs(p.provider, opts.AccountEnv))
+	args := compatibleProviderArgs(p.provider, opts.AccountEnv)
+	var srv *accountServer
+	var err error
+	if deviceTurn(opts) {
+		var deviceArgs []string
+		if deviceArgs, err = deviceServerArgs(opts); err == nil {
+			args = append(args, deviceArgs...)
+		}
+	}
+	if err == nil {
+		srv, err = startAccountServer(ctx, opts, workDir, args)
+	}
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	delete(p.starting, key)
@@ -269,6 +280,11 @@ func runtimeKey(opts agent.RunRequest) string {
 	_, _ = fmt.Fprintf(h, "%T\x00", effectiveSpawner(opts))
 	if agent.SandboxIsolatesProcess(opts.Sandbox, opts.Unrestricted) {
 		_, _ = fmt.Fprintf(h, "%T\x00%s", opts.Sandbox, opts.JailRoot)
+	}
+	// A device server runs with the host tools disabled process-wide, so it
+	// can never serve a server-side turn, nor the reverse.
+	if deviceTurn(opts) {
+		_, _ = io.WriteString(h, "\x00device")
 	}
 	return hex.EncodeToString(h.Sum(nil))
 }
@@ -368,7 +384,7 @@ func startAccountServer(ctx context.Context, opts agent.RunRequest, workDir stri
 func (s *accountServer) dispatch() {
 	for msg := range s.client.incoming {
 		if len(msg.ID) > 0 && msg.Method != "" {
-			if msg.Method != "item/tool/requestUserInput" {
+			if msg.Method != "item/tool/requestUserInput" && msg.Method != dynamicToolCallRequest {
 				_ = s.client.respondError(msg.ID, -32601, "unsupported CAS request")
 				continue
 			}

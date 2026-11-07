@@ -541,6 +541,7 @@ func (h *DeviceHub) ApplyDeviceRoute(ctx context.Context, s store.Store, opts *a
 	if !online {
 		tools = defaultDeviceTools
 	}
+	convTools := knownTools(tools, h.lastKnownTools(binding.DeviceID))
 	opts.ToolRoute = &agent.ToolRoute{
 		MCPServers: map[string]any{
 			// The token rides in a header, not the URL, so access logs never
@@ -557,10 +558,71 @@ func (h *DeviceHub) ApplyDeviceRoute(ctx context.Context, s store.Store, opts *a
 		// works: its CLAUDE.md / .claude settings ("project", "local") must
 		// not steer the turn. The device folder's files are loaded below.
 		SettingSources: []string{"user"},
+		Tools:          convTools,
+		Call: func(ctx context.Context, name string, arguments json.RawMessage) (json.RawMessage, error) {
+			return h.CallTool(ctx, s, convID, name, arguments)
+		},
 	}
 	AppendSystem(opts, deviceSystemPrompt(binding, hello, online))
 	AppendSystem(opts, h.deviceInstructionsPrompt(ctx, s, binding, online))
 	return true
+}
+
+// lastKnownTools is the tool list a device last advertised, without waiting
+// for it to reconnect.
+func (h *DeviceHub) lastKnownTools(deviceID string) []DeviceTool {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return h.lastTools[deviceID]
+}
+
+// knownTools is the schema-bearing tool list a native-tool transport registers
+// for a turn: the live hello when the client is connected, the last advertised
+// list otherwise. Empty when the client has never connected in this process.
+func knownTools(live, last []DeviceTool) []agent.RoutedTool {
+	src := live
+	if len(src) == 0 {
+		src = last
+	}
+	out := make([]agent.RoutedTool, 0, len(src))
+	for _, t := range src {
+		if t.Name == "" || len(t.InputSchema) == 0 {
+			continue
+		}
+		out = append(out, agent.RoutedTool{Name: t.Name, Description: t.Description, InputSchema: t.InputSchema})
+	}
+	return out
+}
+
+// CallTool runs one of the bound device's tools for a conversation and returns
+// the client's MCP CallToolResult. A transport-level failure comes back as an
+// MCP error result, so the model sees why the call failed. The binding is
+// re-read on every call: a revoked device or a rebinding takes effect on the
+// next tool call, even inside a running turn.
+func (h *DeviceHub) CallTool(ctx context.Context, s store.Store, convID, name string, arguments json.RawMessage) (json.RawMessage, error) {
+	if name == "" {
+		return DeviceToolError("invalid tool call"), nil
+	}
+	binding, ok := h.BindingFor(ctx, s, convID)
+	if !ok {
+		return DeviceToolError("this conversation is no longer bound to a computer"), nil
+	}
+	if len(arguments) == 0 || string(arguments) == "null" {
+		arguments = json.RawMessage("{}")
+	}
+	raw, err := h.Call(ctx, binding.DeviceID, "tool", map[string]any{
+		"name": name, "arguments": arguments, "cwd": binding.WorkDir,
+	})
+	if err != nil {
+		return DeviceToolError(err.Error()), nil
+	}
+	return raw, nil
+}
+
+// DeviceToolError is an MCP CallToolResult reporting msg as a tool error.
+func DeviceToolError(msg string) json.RawMessage {
+	raw, _ := json.Marshal(map[string]any{"content": []map[string]string{{"type": "text", "text": msg}}, "isError": true})
+	return raw
 }
 
 // deviceInstructionTimeout bounds how long a turn start waits for the client
@@ -633,8 +695,9 @@ func deviceSystemPrompt(b DeviceBinding, hello DeviceHello, online bool) string 
 		}
 		sb.WriteString(")")
 	}
-	sb.WriteString(". Every file and shell operation goes through the `mcp__" + DeviceMCPServerName + "__*` tools ")
-	sb.WriteString("(Bash, Read, Write, Edit, Glob, Grep), which run on that computer.\n\n")
+	sb.WriteString(". Every file and shell operation goes through the Bash, Read, Write, Edit, Glob and Grep tools ")
+	sb.WriteString("(listed as `mcp__" + DeviceMCPServerName + "__*` where tool names carry a server prefix), which run on that computer. ")
+	sb.WriteString("No other tool can reach any filesystem or run a command.\n\n")
 	sb.WriteString("- Working directory: `" + b.WorkDir + "`. Relative paths and commands resolve against it.\n")
 	if hello.Home != "" {
 		sb.WriteString("- Home directory: `" + hello.Home + "`.\n")

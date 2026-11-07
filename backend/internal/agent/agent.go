@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"strings"
 	"time"
@@ -280,11 +281,24 @@ type ToolRoute struct {
 	// directory, while the device folder's own instruction files arrive in
 	// the system prompt instead.
 	SettingSources []string
+	// Tools and Call serve adapters that register the routed tools natively
+	// and answer the model's calls themselves (Codex app-server dynamicTools)
+	// instead of pointing the agent at MCPServers. Tools is what the model is
+	// offered; Call runs one and returns an MCP CallToolResult.
+	Tools []RoutedTool
+	Call  func(ctx context.Context, name string, arguments json.RawMessage) (json.RawMessage, error)
+}
+
+// RoutedTool is one tool a ToolRoute offers, in MCP tools/list shape.
+type RoutedTool struct {
+	Name        string          `json:"name"`
+	Description string          `json:"description,omitempty"`
+	InputSchema json.RawMessage `json:"inputSchema"`
 }
 
 // ErrToolRouteUnsupported is returned by adapters that cannot honour
 // RunRequest.ToolRoute.
-var ErrToolRouteUnsupported = errors.New("this agent transport cannot run tools on a paired device; switch the provider to the Agent SDK transport")
+var ErrToolRouteUnsupported = errors.New("this agent transport cannot run tools on a paired device; switch the provider to the Agent SDK (Claude) or app-server (Codex) transport")
 
 // DeviceMCPServer is the MCP server a device-bound turn's tools live on.
 const DeviceMCPServer = "daymug_local"

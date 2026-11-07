@@ -10,6 +10,7 @@ import (
 	"log"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/DayMug/DayMug/backend/internal/agent"
@@ -106,7 +107,9 @@ func (r *runner) RunOneshot(ctx context.Context, prompt, workDir string, opts ag
 func (r *runner) RunWithSession(ctx context.Context, prompt, workDir string, opts agent.RunRequest, outputCh chan<- agent.StreamEvent) error {
 	defer close(outputCh)
 	if opts.ToolRoute != nil {
-		return agent.ErrToolRouteUnsupported
+		if err := validateDeviceRoute(opts.ToolRoute); err != nil {
+			return err
+		}
 	}
 	srv, release, err := r.pool.get(ctx, opts, workDir)
 	if err != nil {
@@ -333,8 +336,15 @@ func (r *runner) pumpTurn(
 	opts agent.RunRequest,
 	em *streamcommon.Emitter,
 ) error {
+	// Device tool calls run beside the loop (a Bash call may take minutes) and
+	// end with the turn. The app-server is silent while it waits for one, so
+	// the watchdog stands down until the last answer is sent.
+	toolCtx, cancelTools := context.WithCancel(ctx)
+	defer cancelTools()
+	var toolsInFlight atomic.Int64
 	watchdog := streamcommon.NewWatchdog(streamcommon.WatchdogConfig{
 		Source:           "codex CAS",
+		StallExempt:      func() bool { return toolsInFlight.Load() > 0 },
 		StallTimeout:     opts.StallTimeout,
 		MaxSilentTimeout: opts.MaxSilentTimeout,
 		ActivityProbe: agent.NewProcessActivityProbe(srv.proc, func() []string {
@@ -383,6 +393,22 @@ func (r *runner) pumpTurn(
 					return err
 				}
 				continue
+			}
+			if len(msg.ID) > 0 && msg.Method == dynamicToolCallRequest {
+				toolsInFlight.Add(1)
+				go func(msg wireMessage) {
+					defer toolsInFlight.Add(-1)
+					var route *agent.ToolRoute
+					if deviceTurn(opts) {
+						route = opts.ToolRoute
+					}
+					_ = srv.client.respondResult(msg.ID, toolCallResponse(toolCtx, route, msg.Params))
+				}(msg)
+				continue
+			}
+			if deviceTurn(opts) && usesHostTool(msg) {
+				r.interrupt(srv, threadID, turnID)
+				return errHostToolInDeviceTurn
 			}
 			if msg.Method == "serverRequest/resolved" {
 				if requestID := r.resolveUserQuestion(opts.ControlID, msg.Params); requestID != "" {
@@ -558,6 +584,10 @@ type threadOpenResult struct {
 	PreviousThreadID string
 	Resumed          bool
 	ResumeErr        error
+	// Relocated marks a thread started because the old one's tool set belongs
+	// to the other run location; CarryErr is why its history didn't follow.
+	Relocated bool
+	CarryErr  error
 }
 
 // openThread resumes the conversation's Codex thread, falling back to a fresh
@@ -573,6 +603,11 @@ type threadOpenResult struct {
 // conversation.
 func openThread(ctx context.Context, client *rpcClient, workDir string, opts agent.RunRequest) (threadOpenResult, error) {
 	if opts.SessionID != "" && opts.IsResume {
+		if rollout := sessionlog.CodexRollout(opts.SessionID, opts.ConfigDir); rollout != "" {
+			if hasTools, ok := rolloutToolProfile(rollout); ok && hasTools != deviceTurn(opts) {
+				return relocateThread(ctx, client, workDir, opts, rollout)
+			}
+		}
 		threadID, err := startThread(ctx, client, "thread/resume", workDir, opts)
 		if err == nil {
 			return threadOpenResult{ThreadID: threadID, PreviousThreadID: opts.SessionID, Resumed: true}, nil
@@ -598,7 +633,37 @@ func openThread(ctx context.Context, client *rpcClient, workDir string, opts age
 	return threadOpenResult{ThreadID: threadID}, err
 }
 
+// relocateThread replaces a thread whose tool set belongs to the other run
+// location (the conversation moved between the server and a computer): its
+// dynamic tools can't change, so a new thread starts and inherits the earlier
+// messages.
+func relocateThread(ctx context.Context, client *rpcClient, workDir string, opts agent.RunRequest, rollout string) (threadOpenResult, error) {
+	fresh := opts
+	fresh.SessionID = ""
+	threadID, err := startThread(ctx, client, "thread/start", workDir, fresh)
+	if err != nil {
+		return threadOpenResult{}, err
+	}
+	opened := threadOpenResult{ThreadID: threadID, PreviousThreadID: opts.SessionID, Relocated: true}
+	if items := carriedHistory(rollout); len(items) > 0 {
+		if err := client.call(ctx, "thread/inject_items", map[string]any{"threadId": threadID, "items": items}, nil); err != nil {
+			log.Printf("[codex-CAS] carrying thread %s history into %s failed: %v", opts.SessionID, threadID, err)
+			opened.CarryErr = err
+		}
+	}
+	return opened, nil
+}
+
 func sessionDiagnostic(opened threadOpenResult) agent.StreamEvent {
+	if opened.Relocated {
+		if opened.CarryErr != nil {
+			return agent.StreamEvent{Kind: agent.KindSessionWarning, Content: fmt.Sprintf(
+				"The run location changed, so CAS started thread %s in place of %s, but could not carry the earlier messages over; they remain visible but are no longer in the model context. Reason: %s",
+				opened.ThreadID, opened.PreviousThreadID, compactDiagnosticError(opened.CarryErr),
+			)}
+		}
+		return agent.StreamEvent{Kind: agent.KindSessionInfo, Content: "The run location changed: CAS started thread " + opened.ThreadID + " with the earlier messages of " + opened.PreviousThreadID}
+	}
 	if opened.ResumeErr != nil {
 		return agent.StreamEvent{Kind: agent.KindSessionWarning, Content: fmt.Sprintf(
 			"CAS could not resume thread %s and started a fresh thread %s. Earlier chat remains visible but is no longer in the model context. Reason: %s",
@@ -634,6 +699,11 @@ func startThread(ctx context.Context, client *rpcClient, method, workDir string,
 	}
 	if opts.SystemPrompt != "" {
 		params["developerInstructions"] = opts.SystemPrompt
+	}
+	// Only thread/start takes dynamicTools; a resumed thread keeps the set it
+	// started with (openThread relocates a thread whose set doesn't match).
+	if method == "thread/start" && deviceTurn(opts) {
+		params["dynamicTools"] = dynamicToolSpecs(opts.ToolRoute)
 	}
 	var response struct {
 		Thread struct {

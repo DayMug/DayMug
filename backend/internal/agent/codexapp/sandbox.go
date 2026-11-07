@@ -36,7 +36,7 @@ const (
 // and declares the real arrangement through the turn's sandboxPolicy, where
 // externalSandbox does exist.
 func sandboxMode(opts agent.RunRequest) string {
-	if opts.ReadOnly {
+	if opts.ReadOnly || deviceTurn(opts) {
 		return sandboxModeReadOnly
 	}
 	return sandboxModeDangerFullAccess
@@ -52,7 +52,9 @@ func sandboxPolicy(opts agent.RunRequest) map[string]any {
 }
 
 func sandboxPolicyType(opts agent.RunRequest) string {
-	if opts.ReadOnly {
+	// A device-bound turn has no host tools at all (see device.go); read-only
+	// is the second wall should Codex ever expose one.
+	if opts.ReadOnly || deviceTurn(opts) {
 		return sandboxPolicyReadOnly
 	}
 	if agent.SandboxIsolatesProcess(opts.Sandbox, opts.Unrestricted) {

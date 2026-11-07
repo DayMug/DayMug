@@ -330,3 +330,47 @@ func TestDeviceFiles(t *testing.T) {
 		t.Fatalf("calls = %v", calls)
 	}
 }
+
+func TestApplyDeviceRouteServesNativeToolTransports(t *testing.T) {
+	s, h := deviceFixture(t)
+	ctx := context.Background()
+	d, _ := s.CreateDevice(ctx, store.Device{ID: "d1", UserID: "h1", OS: "linux", TokenHash: "x"})
+	if err := s.SetConversationDevice(ctx, store.ConversationDevice{ConversationID: "c1", DeviceID: d.ID, WorkDir: "/home/me/proj"}); err != nil {
+		t.Fatal(err)
+	}
+	var called map[string]any
+	connect(h, d, DeviceHello{OS: "linux", Tools: []DeviceTool{
+		{Name: "Bash", Description: "Run", InputSchema: json.RawMessage(`{"type":"object"}`)},
+		{Name: "NoSchema"},
+	}}, func(f DeviceFrame) DeviceFrame {
+		if f.Method != "tool" {
+			return DeviceFrame{Type: "result", ID: f.ID, Result: json.RawMessage(`{"files":[]}`)}
+		}
+		_ = json.Unmarshal(f.Params, &called)
+		return DeviceFrame{Type: "result", ID: f.ID, Result: json.RawMessage(`{"content":[{"type":"text","text":"ok"}]}`)}
+	})
+	var opts agent.RunRequest
+	if !h.ApplyDeviceRoute(ctx, s, &opts, "c1", "http://127.0.0.1:8080") {
+		t.Fatal("not routed")
+	}
+	route := opts.ToolRoute
+	if len(route.Tools) != 1 || route.Tools[0].Name != "Bash" || string(route.Tools[0].InputSchema) != `{"type":"object"}` {
+		t.Fatalf("tools = %+v; a tool without a schema can't be registered", route.Tools)
+	}
+	raw, err := route.Call(ctx, "Bash", json.RawMessage(`{"command":"pwd"}`))
+	if err != nil || string(raw) != `{"content":[{"type":"text","text":"ok"}]}` {
+		t.Fatalf("call = %s, %v", raw, err)
+	}
+	if called["name"] != "Bash" || called["cwd"] != "/home/me/proj" {
+		t.Fatalf("device received %v", called)
+	}
+
+	// Unbinding mid-turn applies to the next call of a route already handed out.
+	if err := s.ClearConversationDevice(ctx, "c1"); err != nil {
+		t.Fatal(err)
+	}
+	raw, _ = route.Call(ctx, "Bash", nil)
+	if !strings.Contains(string(raw), `"isError":true`) || !strings.Contains(string(raw), "no longer bound") {
+		t.Fatalf("unbound call = %s", raw)
+	}
+}

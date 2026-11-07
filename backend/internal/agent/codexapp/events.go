@@ -146,7 +146,12 @@ type item struct {
 	Tool             string          `json:"tool"`
 	Arguments        json.RawMessage `json:"arguments"`
 	Result           json.RawMessage `json:"result"`
-	Error            *struct {
+	ContentItems     []struct {
+		Type string `json:"type"`
+		Text string `json:"text"`
+	} `json:"contentItems"`
+	Success *bool `json:"success"`
+	Error   *struct {
 		Message string `json:"message"`
 	} `json:"error"`
 	Query string `json:"query"`
@@ -182,6 +187,7 @@ var appItemKinds = map[string]codexcommon.ItemKind{
 	"fileChange":       codexcommon.ItemFileChange,
 	"mcpToolCall":      codexcommon.ItemMcpToolCall,
 	"webSearch":        codexcommon.ItemWebSearch,
+	"dynamicToolCall":  codexcommon.ItemDynamicToolCall,
 }
 
 func (i item) common() codexcommon.Item {
@@ -199,6 +205,16 @@ func (i item) common() codexcommon.Item {
 	}
 	if i.Error != nil {
 		out.ErrorMessage = i.Error.Message
+	}
+	if out.Kind == codexcommon.ItemDynamicToolCall {
+		texts := make([]string, 0, len(i.ContentItems))
+		for _, c := range i.ContentItems {
+			if c.Type == "inputText" && c.Text != "" {
+				texts = append(texts, c.Text)
+			}
+		}
+		out.ResultText = strings.Join(texts, "\n")
+		out.Failed = (i.Success != nil && !*i.Success) || i.Status == "failed"
 	}
 	for _, change := range i.Changes {
 		out.Changes = append(out.Changes, codexcommon.FileChange{Path: change.Path, Kind: change.Kind})

@@ -487,33 +487,15 @@ func (h *DeviceHandler) mcpDispatch(ctx context.Context, convID string, req json
 	return resp
 }
 
-func mcpToolError(msg string) map[string]any {
-	return map[string]any{"content": []map[string]string{{"type": "text", "text": msg}}, "isError": true}
-}
-
 func (h *DeviceHandler) mcpCallTool(ctx context.Context, convID string, params json.RawMessage) any {
 	var p struct {
 		Name      string          `json:"name"`
 		Arguments json.RawMessage `json:"arguments"`
 	}
 	if err := json.Unmarshal(params, &p); err != nil || p.Name == "" {
-		return mcpToolError("invalid tool call")
+		return service.DeviceToolError("invalid tool call")
 	}
-	// Re-read on every call: a revoked device or a rebinding takes effect on
-	// the next tool call, even inside a running turn.
-	binding, ok := h.Hub.BindingFor(ctx, h.Store, convID)
-	if !ok {
-		return mcpToolError("this conversation is no longer bound to a computer")
-	}
-	if len(p.Arguments) == 0 {
-		p.Arguments = json.RawMessage("{}")
-	}
-	raw, err := h.Hub.Call(ctx, binding.DeviceID, "tool", map[string]any{
-		"name": p.Name, "arguments": p.Arguments, "cwd": binding.WorkDir,
-	})
-	if err != nil {
-		return mcpToolError(err.Error())
-	}
+	raw, _ := h.Hub.CallTool(ctx, h.Store, convID, p.Name, p.Arguments)
 	return raw
 }
 

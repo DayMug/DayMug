@@ -380,6 +380,12 @@ type scriptedSpawner struct {
 	// of the serve loop) until the channel is closed — the window in which a
 	// user cancel used to orphan the just-started turn.
 	turnStartGate chan struct{}
+	// deviceToolCall makes a turn run one dynamic Bash call: the server sends
+	// item/tool/call "tool-1" and finishes the turn once it is answered.
+	deviceToolCall bool
+	toolAnswer     map[string]any
+	// hostToolInTurn makes a turn start a server-side commandExecution.
+	hostToolInTurn bool
 }
 
 func (s *scriptedSpawner) Spawn(_ context.Context, req agent.SpawnRequest) (agent.RunningProcess, error) {
@@ -417,10 +423,24 @@ func (s *scriptedSpawner) serve(in io.Reader, out *io.PipeWriter, done chan stru
 			writeJSON(out, map[string]any{"method": "turn/completed", "params": map[string]any{"threadId": threadID, "turn": map[string]any{"id": "turn-1", "status": "completed"}}})
 			continue
 		}
+		if method == "" && fmt.Sprint(id) == "tool-1" {
+			s.mu.Lock()
+			s.toolAnswer = request
+			threadID := fmt.Sprintf("thread-%d", s.threadCount)
+			s.mu.Unlock()
+			writeJSON(out, map[string]any{"method": "item/completed", "params": map[string]any{"threadId": threadID, "item": map[string]any{
+				"id": "call-1", "type": "dynamicToolCall", "tool": "Bash", "arguments": map[string]any{"command": "pwd"},
+				"status": "completed", "success": true, "contentItems": []map[string]any{{"type": "inputText", "text": "/home/me/project"}},
+			}}})
+			writeJSON(out, map[string]any{"method": "turn/completed", "params": map[string]any{"threadId": threadID, "turn": map[string]any{"id": "turn-1", "status": "completed"}}})
+			continue
+		}
 		if !hasID {
 			continue
 		}
 		switch method {
+		case "thread/inject_items":
+			writeJSON(out, map[string]any{"id": id, "result": map[string]any{}})
 		case "initialize":
 			writeJSON(out, map[string]any{"id": id, "result": map[string]any{}})
 		case "account/read":
@@ -483,6 +503,24 @@ func (s *scriptedSpawner) serve(in io.Reader, out *io.PipeWriter, done chan stru
 						"codexErrorInfo": map[string]any{"responseStreamDisconnected": map[string]any{"httpStatusCode": 500}},
 					},
 				}})
+			}
+			s.mu.Lock()
+			deviceToolCall, hostTool := s.deviceToolCall, s.hostToolInTurn
+			s.mu.Unlock()
+			if hostTool {
+				writeJSON(out, map[string]any{"method": "item/started", "params": map[string]any{"threadId": threadID, "item": map[string]any{
+					"id": "cmd-1", "type": "commandExecution", "command": "cat /etc/hostname", "status": "inProgress",
+				}}})
+				continue
+			}
+			if deviceToolCall {
+				writeJSON(out, map[string]any{"method": "item/started", "params": map[string]any{"threadId": threadID, "item": map[string]any{
+					"id": "call-1", "type": "dynamicToolCall", "tool": "Bash", "arguments": map[string]any{"command": "pwd"}, "status": "inProgress",
+				}}})
+				writeJSON(out, map[string]any{"id": "tool-1", "method": "item/tool/call", "params": map[string]any{
+					"threadId": threadID, "turnId": "turn-1", "callId": "call-1", "tool": "Bash", "arguments": map[string]any{"command": "pwd"},
+				}})
+				continue
 			}
 			if askQuestion {
 				writeJSON(out, map[string]any{
